@@ -80,13 +80,11 @@ from lionz.resources import AVAILABLE_MODELS, check_cuda, TRACER_WORKFLOWS
 
 from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2
 
-logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', level=logging.INFO,
-                    filename=datetime.now().strftime('lionz-v.0.1.0.%H-%M-%d-%m-%Y.log'),
-                    filemode='w')
-
 
 # Main function for the module
 def main():
+    logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', level=logging.INFO,
+                        filename=datetime.now().strftime('lionz-v.0.1.0.%H-%M-%d-%m-%Y.log'), filemode='w')
     colorama.init()
 
     # Argument parser
