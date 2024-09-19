@@ -160,6 +160,7 @@ def main():
     print(' ')
     print(f'{constants.ANSI_VIOLET} {emoji.emojize(":memo:")} NOTE:{constants.ANSI_RESET}')
     print(' ')
+    print(f'{constants.ANSI_ORANGE} Training dataset size for FDG: {constants.TRAINING_DATASET_SIZE_FDG} | Training dataset size for PSMA: {constants.TRAINING_DATASET_SIZE_PSMA} {constants.ANSI_RESET}')
     modalities = display.expectations(model_name)
     custom_trainer_status = add_custom_trainers_to_local_nnunetv2()
     logging.info('- Custom trainer: ' + custom_trainer_status)
