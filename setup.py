@@ -14,7 +14,7 @@ emails_string = ", ".join([email for name, email in AUTHORS])
 
 setup(
     name='lionz',
-    version='0.9.2',
+    version='0.9.3',
     packages=find_packages(),
     install_requires=[
         'nnunetv2',
@@ -22,7 +22,7 @@ setup(
         'halo',
         'pandas',
         'SimpleITK',
-        'pydicom',
+        'pydicom~=2.2.2',
         'argparse',
         'imageio',
         'numpy<2.0',
@@ -35,7 +35,7 @@ setup(
         'colorama',
         'dask',
         'rich',
-        'dicom2nifti',
+        'dicom2nifti~=2.4.8',
         'emoji',
         'dask[distributed]',
         'opencv-python',
