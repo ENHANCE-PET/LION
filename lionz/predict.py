@@ -73,7 +73,7 @@ class ImagePreprocessor:
                         self._resample_image_to_reference(image, max_voxel_image, target_voxel_spacing)
 
 
-def predict_tumor(workflow_dir: str, model_name: str, output_dir: str, accelerator: str, thresholding: bool):
+def predict_tumor(workflow_dir: str, model_name: str, output_dir: str, accelerator: str, thresholding: bool = False):
     # Preprocess the images
     workflowPreprocessor = ImagePreprocessor(workflow_dir, MODELS)
     workflowPreprocessor.preprocess_workflow(model_name)
