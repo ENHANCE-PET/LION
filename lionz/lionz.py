@@ -301,7 +301,7 @@ def main():
                     f' | Time per dataset: {round(time_per_dataset, 2)} min {constants.ANSI_RESET}')
 
 
-def lion(model_name: str, input_dir: str, seg_output_dir: str, accelerator: str) -> None:
+def lion(model_name: str, input_dir: str, seg_output_dir: str, accelerator: str, thresholding: bool = False) -> None:
     """
     Execute the LION tumour segmentation process.
 
@@ -346,7 +346,7 @@ def lion(model_name: str, input_dir: str, seg_output_dir: str, accelerator: str)
                                                                                                         modalities)
     file_utilities.organise_files_by_modality([input_dir], modalities, lion_dir)
     file_utilities.create_model_based_workflows(lion_dir, model_name)
-    segmentation_file = predict_tumor(workflow_dir, model_name, output_dir, accelerator)
+    segmentation_file = predict_tumor(workflow_dir, model_name, output_dir, accelerator, thresholding)
     # Post-processing the segmentation file
     reference_modality = TRACER_WORKFLOWS[model_name]['reference_modality']
     # get the reference_modality directory from the lionz directory
