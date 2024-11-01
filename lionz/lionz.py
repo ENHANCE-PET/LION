@@ -55,28 +55,35 @@ __email__ = "lalith.shiyamsundar@meduniwien.ac.at, sebastian.gutschmayer@meduniw
 __version__ = "0.1"
 
 # Imports for the module
+import os
 
+import numpy
+
+os.environ["nnUNet_raw"] = ""
+os.environ["nnUNet_preprocessed"] = ""
+os.environ["nnUNet_results"] = ""
 
 import argparse
-import glob
 import logging
-import os
 import time
 from datetime import datetime
 
 import colorama
 import emoji
-from halo import Halo
+import SimpleITK
+
 
 from lionz import constants
-from lionz import display
-from lionz import download
 from lionz import file_utilities
 from lionz import image_conversion
 from lionz import input_validation
 from lionz import image_processing
-from lionz.predict import predict_tumor, post_process
-from lionz.resources import AVAILABLE_MODELS, check_cuda, TRACER_WORKFLOWS
+from lionz import system
+from lionz import models
+from lionz import predict
+from lionz.models import AVAILABLE_MODELS
+from lionz import resources
+from lionz import download
 
 from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2
 
@@ -84,12 +91,12 @@ from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnu
 # Main function for the module
 def main():
     logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', level=logging.INFO,
-                        filename=datetime.now().strftime('lionz-v.0.1.0.%H-%M-%d-%m-%Y.log'), filemode='w')
+                        filename=datetime.now().strftime('lionz-v.0.10.0.%H-%M-%d-%m-%Y.log'), filemode='w')
     colorama.init()
 
     # Argument parser
     parser = argparse.ArgumentParser(
-        description=display.get_usage_message(),
+        description=constants.USAGE_MESSAGE,
         formatter_class=argparse.RawTextHelpFormatter,  # To retain the custom formatting
         add_help=False  # We'll add our own help option later
     )
@@ -116,11 +123,23 @@ def main():
 
     # Whether the obtained segmentations should be thresholded
     parser.add_argument(
-        "-t", "--thresholding",
+        "-t", "--threshold",
         required=False,
+        type=float,
         default=False,
-        action='store_true',
-        help="Use to threshold the segmentations"
+        help="Use to define a threshold value and apply to the tumor segmentations"
+    )
+
+    parser.add_argument(
+        "-v-off", "--verbose_off",
+        action="store_false",
+        help="Deactivate verbose console."
+    )
+
+    parser.add_argument(
+        "-log-off", "--logging_off",
+        action="store_false",
+        help="Deactivate logging."
     )
 
     # Custom help option
@@ -134,67 +153,89 @@ def main():
     # Parse the arguments
     args = parser.parse_args()
 
+    verbose_console = args.verbose_off
+    verbose_log = args.logging_off
+
+    output_manager = system.OutputManager(verbose_console, verbose_log)
+    output_manager.display_logo()
+    output_manager.display_authors()
+    output_manager.display_citation()
+
+
     # Get the main directory and model name
     parent_folder = os.path.abspath(args.main_directory)
     model_name = args.model_name
 
     # Check for thresholding
-    thresholding = args.thresholding
+    threshold = args.threshold
 
-    # Display messages
-    display.logo()
-    display.citation()
-
-    logging.info('----------------------------------------------------------------------------------------------------')
-    logging.info('                                     STARTING LIONZ-v.0.1.0                                         ')
-    logging.info('----------------------------------------------------------------------------------------------------')
+    output_manager.configure_logging(parent_folder)
+    output_manager.log_update('----------------------------------------------------------------------------------------------------')
+    output_manager.log_update('                                     STARTING LIONZ-v.0.10.0                                         ')
+    output_manager.log_update('----------------------------------------------------------------------------------------------------')
 
     # ----------------------------------
-    # INPUT VALIDATION AND PREPARATION
+    # DOWNLOADING THE BINARIES
     # ----------------------------------
 
-    logging.info(' ')
-    logging.info('- Main directory: ' + parent_folder)
-    logging.info('- Model name: ' + model_name)
-    logging.info(' ')
-    print(' ')
-    print(f'{constants.ANSI_VIOLET} {emoji.emojize(":memo:")} NOTE:{constants.ANSI_RESET}')
-    print(' ')
-    print(f'{constants.ANSI_ORANGE} Training dataset size > FDG: {constants.TRAINING_DATASET_SIZE_FDG} | PSMA: {constants.TRAINING_DATASET_SIZE_PSMA} {constants.ANSI_RESET}')
-    modalities = display.expectations(model_name)
-    custom_trainer_status = add_custom_trainers_to_local_nnunetv2()
-    logging.info('- Custom trainer: ' + custom_trainer_status)
-    accelerator = check_cuda()
-    inputs_valid = input_validation.validate_inputs(parent_folder, model_name)
-    if not inputs_valid:
-        exit(1)
-    else:
-        logging.info(f"Input validation successful.")
+    print('')
+    print(f'{constants.ANSI_VIOLET} {emoji.emojize(":globe_with_meridians:")} BINARIES DOWNLOAD:{constants.ANSI_RESET}')
+
+    print('')
+    binary_path = constants.BINARY_PATH
+    file_utilities.create_directory(binary_path)
+    system_os, system_arch = file_utilities.get_system()
+    output_manager.console_update(f' Detected system: {system_os} | Detected architecture: {system_arch}')
+    download.download(item_name=f'{system_os}-{system_arch}', item_path=binary_path,
+                      item_dict=resources.BINARIES, output_manager=output_manager)
+    file_utilities.set_permissions(file_utilities.get_c3d_path(), system_os, output_manager)
 
     # ------------------------------
     # DOWNLOAD THE MODEL
     # ------------------------------
 
-    print('')
-    print(f'{constants.ANSI_VIOLET} {emoji.emojize(":globe_with_meridians:")} MODEL DOWNLOAD:{constants.ANSI_RESET}')
-    print('')
-    model_path = constants.NNUNET_RESULTS_FOLDER
+    output_manager.console_update('')
+    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":globe_with_meridians:")} MODEL DOWNLOAD:{constants.ANSI_RESET}')
+    output_manager.console_update('')
+    model_path = system.MODELS_DIRECTORY_PATH
     file_utilities.create_directory(model_path)
-    download.model(model_name, model_path)
+    model_routine = models.construct_model_routine(model_name, output_manager)
+
+    # ----------------------------------
+    # INPUT VALIDATION AND PREPARATION
+    # ----------------------------------
+
+    output_manager.log_update(' ')
+    output_manager.log_update('- Main directory: ' + parent_folder)
+    output_manager.log_update('- Model name: ' + model_name)
+    output_manager.log_update(' ')
+    output_manager.console_update(' ')
+    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":memo:")} NOTE:{constants.ANSI_RESET}')
+    output_manager.console_update(' ')
+
+    custom_trainer_status = add_custom_trainers_to_local_nnunetv2()
+    modalities = input_validation.determine_model_expectations(model_routine, output_manager)
+    output_manager.log_update('- Custom trainer: ' + custom_trainer_status)
+    accelerator, device_count = system.check_device()
+    inputs_valid = input_validation.validate_inputs(parent_folder, model_name)
+    if not inputs_valid:
+        exit(1)
+    else:
+        output_manager.log_update(f"Input validation successful.")
+
 
     # ------------------------------
     # INPUT STANDARDIZATION
     # ------------------------------
-    print('')
-    print(
-        f'{constants.ANSI_VIOLET} {emoji.emojize(":magnifying_glass_tilted_left:")} STANDARDIZING INPUT DATA TO NIFTI:{constants.ANSI_RESET}')
-    print('')
-    logging.info(' ')
-    logging.info(' STANDARDIZING INPUT DATA TO NIFTI:')
-    logging.info(' ')
-    image_conversion.standardize_to_nifti(parent_folder)
-    print(f"{constants.ANSI_GREEN} Standardization complete.{constants.ANSI_RESET}")
-    logging.info(" Standardization complete.")
+    output_manager.console_update('')
+    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":magnifying_glass_tilted_left:")} STANDARDIZING INPUT DATA TO NIFTI:{constants.ANSI_RESET}')
+    output_manager.console_update('')
+    output_manager.log_update(' ')
+    output_manager.log_update(' STANDARDIZING INPUT DATA TO NIFTI:')
+    output_manager.log_update(' ')
+    image_conversion.standardize_to_nifti(parent_folder, output_manager)
+    output_manager.console_update(f"{constants.ANSI_GREEN} Standardization complete.{constants.ANSI_RESET}")
+    output_manager.log_update(" Standardization complete.")
 
     # ------------------------------
     # CHECK FOR LIONZ COMPLIANCE
@@ -202,7 +243,7 @@ def main():
 
     subjects = [os.path.join(parent_folder, d) for d in os.listdir(parent_folder) if
                 os.path.isdir(os.path.join(parent_folder, d))]
-    lion_compliant_subjects = input_validation.select_lion_compliant_subjects(subjects, modalities)
+    lion_compliant_subjects = input_validation.select_lion_compliant_subjects(subjects, modalities, output_manager)
 
     num_subjects = len(lion_compliant_subjects)
     if num_subjects < 1:
@@ -213,163 +254,246 @@ def main():
     # RUN PREDICTION ONLY FOR LION COMPLIANT SUBJECTS
     # -------------------------------------------------
 
-    print('')
-    print(f'{constants.ANSI_VIOLET} {emoji.emojize(":crystal_ball:")} PREDICT:{constants.ANSI_RESET}')
-    print('')
-    logging.info(' ')
-    logging.info(' PERFORMING PREDICTION:')
-    logging.info(' ')
+    output_manager.console_update('')
+    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":crystal_ball:")} PREDICT:{constants.ANSI_RESET}')
+    output_manager.console_update('')
+    output_manager.log_update(' ')
+    output_manager.log_update(' PERFORMING PREDICTION:')
+    output_manager.log_update(' ')
 
-    spinner = Halo(text=' Initiating', spinner='dots')
-    spinner.start()
+    output_manager.spinner_start()
     start_total_time = time.time()
 
+    subject_performance_parameters = []
+
     for i, subject in enumerate(lion_compliant_subjects):
-        # SETTING UP DIRECTORY STRUCTURE
-        spinner.text = f'[{i + 1}/{num_subjects}] Setting up directory structure for {os.path.basename(subject)}...'
-        logging.info(' ')
-        logging.info(f'{constants.ANSI_VIOLET} SETTING UP LION-Z DIRECTORY:'
-                     f'{constants.ANSI_RESET}')
-        logging.info(' ')
-        lion_dir, input_dirs, output_dir, stats_dir, workflow_dir = file_utilities.lion_folder_structure(subject,
-                                                                                                         model_name,
-                                                                                                         modalities)
-        logging.info(f" LION directory for subject {os.path.basename(subject)} at: {lion_dir}")
+        lion_subject(subject, i, num_subjects, model_routine, accelerator, output_manager, threshold)
 
-        # ORGANISE DATA ACCORDING TO MODALITY
-        spinner.text = f'[{i + 1}/{num_subjects}] Organising data according to modality for {os.path.basename(subject)}...'
-        file_utilities.organise_files_by_modality([subject], modalities, lion_dir)
-
-        # ORGANIZE IMAGES ACCORDING TO WORKFLOW STAGES
-        spinner.text = f'Processing subject {i + 1}/{num_subjects}: Organizing images for {os.path.basename(subject)} ' \
-                       f'by workflow.'
-        file_utilities.create_model_based_workflows(lion_dir, model_name)
-
-        # PREDICT IMAGES
-        start_time = time.time()
-        spinner.text = f'[{i + 1}/{num_subjects}] Predicting images for {os.path.basename(subject)}...'
-        logging.info(' ')
-        logging.info(f'{constants.ANSI_VIOLET} PREDICTING IMAGES:'
-                     f'{constants.ANSI_RESET}')
-        logging.info(' ')
-        segmentation_file = predict_tumor(workflow_dir, model_name, output_dir, accelerator, thresholding)
-        # Post-processing the segmentation file
-        reference_modality = TRACER_WORKFLOWS[model_name]['reference_modality']
-        # get the reference_modality directory from the lionz directory
-        reference_modality_dir = os.path.join(lion_dir, reference_modality)
-        # get the reference_modality image from the reference_modality directory extension .nii or .nii.gz
-        nifti_files = glob.glob(os.path.join(reference_modality_dir, '*.nii*'))
-        reference_modality_file = nifti_files[0]
-        # resample the segmentation file to the reference_modality image
-        post_process(reference_modality_file, segmentation_file, segmentation_file)
-        # rename the segmentation file with the subject name as prefix
-        os.rename(segmentation_file, os.path.join(output_dir, os.path.basename(subject) + '_tumor_seg.nii.gz'))
-        new_segmentation_file = os.path.join(output_dir, os.path.basename(subject) + '_tumor_seg.nii.gz')
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        spinner.text = f' {constants.ANSI_GREEN}[{i + 1}/{num_subjects}] Prediction done for {os.path.basename(subject)} using {model_name}!' \
-                       f' | Elapsed time: {round(elapsed_time / 60, 1)} min{constants.ANSI_RESET}'
-        time.sleep(3)
-        spinner.text = f'[{i + 1}/{num_subjects}] Calculating fused MIP of PET image and tumor mask for ' \
-                       f'{os.path.basename(subject)}...'
-        image_processing.create_rotational_mip_gif(reference_modality_file,
-                                                   new_segmentation_file,
-                                                   os.path.join(output_dir,
-                                                                os.path.basename(subject) +
-                                                                '_rotational_mip.gif'),
-                                                   rotation_step=constants.MIP_ROTATION_STEP,
-                                                   output_spacing=constants.MIP_VOXEL_SPACING)
-        spinner.text = f'{constants.ANSI_GREEN} [{i + 1}/{num_subjects}] Fused MIP of PET image and tumor mask ' \
-                       f'calculated' \
-                       f' for {os.path.basename(subject)}! '
-        time.sleep(3)
-
-        tumor_volume, average_intensity = image_processing.compute_tumor_metrics(new_segmentation_file,
-                                                                                 reference_modality_file)
-        # if tumor_volume is zero then the segmentation should have a suffix _no_tumor_seg.nii.gz
-        if tumor_volume == 0:
-            os.rename(new_segmentation_file, os.path.join(output_dir, os.path.basename(subject) + '_no_tumor_seg.nii.gz'))
-        image_processing.save_metrics_to_csv(tumor_volume, average_intensity, os.path.join(stats_dir,
-                                                                                           os.path.basename(subject) +
-                                                                                           '_metrics.csv'))
     end_total_time = time.time()
     total_elapsed_time = (end_total_time - start_total_time) / 60
     time_per_dataset = total_elapsed_time / len(lion_compliant_subjects)
+    time_per_model = time_per_dataset / len(model_name)
 
-    spinner.succeed(f'{constants.ANSI_GREEN} All predictions done! | Total elapsed time for '
-                    f'{len(lion_compliant_subjects)} datasets: {round(total_elapsed_time, 1)} min'
-                    f' | Time per dataset: {round(time_per_dataset, 2)} min {constants.ANSI_RESET}')
+    output_manager.spinner_succeed(f'{constants.ANSI_GREEN} All predictions done! | Total elapsed time for '
+                                   f'{len(lion_compliant_subjects)} datasets: {round(total_elapsed_time, 1)} min'
+                                   f' | Time per dataset: {round(time_per_dataset, 2)} min')
+    output_manager.log_update(f' ')
+    output_manager.log_update(f' ALL SUBJECTS PROCESSED')
+    output_manager.log_update(f'  - Number of Subjects: {len(lion_compliant_subjects)}')
+    output_manager.log_update(f'  - Number of Models:   {len(model_name)}')
+    output_manager.log_update(f'  - Time (total):       {round(total_elapsed_time, 1)}min')
+    output_manager.log_update(f'  - Time (per subject): {round(time_per_dataset, 2)}min')
+    output_manager.log_update(f'  - Time (per model):   {round(time_per_model, 2)}min')
+
+    output_manager.log_update('----------------------------------------------------------------------------------------------------')
+    output_manager.log_update('                                     FINISHED LION-Z V.0.10.0                                       ')
+    output_manager.log_update('----------------------------------------------------------------------------------------------------')
 
 
-def lion(model_name: str, input_dir: str, seg_output_dir: str, accelerator: str, thresholding: bool = False) -> None:
+def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
+         model_name: str, output_dir: str = None, accelerator: str = None, threshold: int = False) -> str | numpy.ndarray | SimpleITK.Image:
     """
     Execute the LION tumour segmentation process.
 
-    This function carries out the following steps:
-    1. Sets the path for model results.
-    2. Creates the required directory for the model.
-    3. Downloads the model based on the provided `model_name`.
-    4. Validates and prepares the input directory to be compatible with nnUNet.
-    5. Executes the prediction process.
+    :param input_data: The input data to process, which can be one of the following:
+                       - str: A file path to a NIfTI file.
+                       - tuple[numpy.ndarray, tuple[float, float, float]]: A tuple containing a numpy array and spacing.
+                       - SimpleITK.Image: An image object to process.
 
-    :param model_name: The name of the model to be used for predictions. This model will be downloaded and used 
-                       for the tumour segmentation process.
-    :type model_name: str
+    :param model_names: The name(s) of the model(s) to be used for segmentation.
+    :type model_names: str or list[str]
 
-    :param input_dir: Path to the directory containing the images (in nifti, either .nii or .nii.gz) to be processed.
-    :type input_dir: str
+    :param output_dir: Path to the directory where the output will be saved if the input is a file path.
+    :type output_dir: Optional[str]
 
-    :param output_dir: Path to the directory where the segmented output will be saved.
-    :type output_dir: str
+    :param accelerator: Specifies the accelerator type, e.g., "cpu" or "cuda".
+    :type accelerator: Optional[str]
 
-    :param accelerator: Specifies the type of accelerator to be used. Common values include "cpu" and "cuda" for 
-                        GPU acceleration.
-    :type accelerator: str
-
-    :return: None
-    :rtype: None
+    :return: The output type aligns with the input type:
+             - str (file path): If `input_data` is a file path.
+             - SimpleITK.Image: If `input_data` is a SimpleITK.Image.
+             - numpy.ndarray: If `input_data` is a numpy array.
+    :rtype: str or SimpleITK.Image or numpy.ndarray
 
     :Example:
 
-    >>> lion('fdg', '/path/to/input/images', '/path/to/save/output', 'cuda')
+    >>> lion('/path/to/input/images', 'model_name', '/path/to/save/output', 'cuda', threshold_value)
+    >>> lion((numpy_array, (3, 3, 3)), 'model_name', '/path/to/save/output', 'cuda', threshold_value)
+    >>> lion(simple_itk_image, 'model_name', '/path/to/save/output', 'cuda', threshold_value)
 
     """
-    model_path = constants.NNUNET_RESULTS_FOLDER
-    modalities = display.expectations(model_name)
-    custom_trainer_status = add_custom_trainers_to_local_nnunetv2()
-    logging.info('- Custom trainer: ' + custom_trainer_status)
+    # Load the image and set a default filename based on input type
+    if isinstance(input_data, str):
+        image = SimpleITK.ReadImage(input_data)
+        file_name = file_utilities.get_nifti_file_stem(input_data)
+    elif isinstance(input_data, SimpleITK.Image):
+        image = input_data
+        file_name = 'image_from_simpleitk'
+    elif isinstance(input_data, tuple) and isinstance(input_data[0], numpy.ndarray) and isinstance(input_data[1], tuple):
+        numpy_array, spacing = input_data
+        image = SimpleITK.GetImageFromArray(numpy_array)
+        image.SetSpacing(spacing)
+        file_name = 'image_from_array'
+    else:
+        raise ValueError(
+            "Invalid input format. `input_data` must be either a file path (str), "
+            "a SimpleITK.Image, or a tuple (numpy array, spacing)."
+        )
+    output_manager = system.OutputManager(False, False)
+
+    binary_path = constants.BINARY_PATH
+    file_utilities.create_directory(binary_path)
+    system_os, system_arch = file_utilities.get_system()
+    download.download(item_name=f'{system_os}-{system_arch}', item_path=binary_path,
+                      item_dict=resources.BINARIES, output_manager=output_manager)
+    file_utilities.set_permissions(file_utilities.get_c3d_path(), system_os, output_manager)
+
+    model_path = system.MODELS_DIRECTORY_PATH
     file_utilities.create_directory(model_path)
-    download.model(model_name, model_path)
+    model_routine = models.construct_model_routine(model_name, output_manager)
 
-    lion_dir, input_dirs, output_dir, stats_dir, workflow_dir = file_utilities.lion_folder_structure(input_dir,
-                                                                                                        model_name,
-                                                                                                        modalities)
-    file_utilities.organise_files_by_modality([input_dir], modalities, lion_dir)
-    file_utilities.create_model_based_workflows(lion_dir, model_name)
-    segmentation_file = predict_tumor(workflow_dir, model_name, output_dir, accelerator, thresholding)
-    # Post-processing the segmentation file
-    reference_modality = TRACER_WORKFLOWS[model_name]['reference_modality']
-    # get the reference_modality directory from the lionz directory
-    reference_modality_dir = os.path.join(lion_dir, reference_modality)
-    # get the reference_modality image from the reference_modality directory extension .nii or .nii.gz
-    nifti_files = glob.glob(os.path.join(reference_modality_dir, '*.nii*'))
-    reference_modality_file = nifti_files[0]
-    # resample the segmentation file to the reference_modality image
-    post_process(reference_modality_file, segmentation_file, segmentation_file)
-    # rename the segmentation file with the subject name as prefix
-    os.rename(segmentation_file, os.path.join(seg_output_dir, os.path.basename(input_dir) + '_tumor_seg.nii.gz'))
-    new_segmentation_file = os.path.join(seg_output_dir, os.path.basename(input_dir) + '_tumor_seg.nii.gz')
+    for desired_spacing, model_workflows in model_routine.items():
+        resampled_array = image_processing.ImageResampler.resample_image_SimpleITK_DASK_array(image, 'bspline',
+                                                                                              desired_spacing)
+        for model_workflow in model_workflows:
+            segmentation_array = predict.predict_from_array_by_iterator(resampled_array, model_workflow[0], accelerator,
+                                                                        os.devnull, threshold)
 
-    # Save some statistics
-    tumor_volume, average_intensity = image_processing.compute_tumor_metrics(new_segmentation_file,
-                                                                            reference_modality_file)
-    if tumor_volume == 0:
-        os.rename(new_segmentation_file, os.path.join(seg_output_dir, os.path.basename(input_dir) +
-                                                      '_no_tumor_seg.nii.gz'))
-    image_processing.save_metrics_to_csv(tumor_volume, average_intensity, os.path.join(stats_dir,
-                                                                                        os.path.basename(input_dir) +
-                                                                                        '_metrics.csv'))
-    
+            segmentation = SimpleITK.GetImageFromArray(segmentation_array)
+            segmentation.SetSpacing(desired_spacing)
+            segmentation.SetOrigin(image.GetOrigin())
+            segmentation.SetDirection(image.GetDirection())
+            resampled_segmentation = image_processing.ImageResampler.resample_segmentation(image, segmentation)
+
+            # Return based on input type
+            if isinstance(input_data, str):  # Return file path if input was a file path
+                if output_dir is None:
+                    output_dir = os.path.dirname(input_data)
+                segmentation_image_path = os.path.join(
+                    output_dir, f"{model_workflow.target_model.multilabel_prefix}segmentation_{file_name}.nii.gz"
+                )
+                SimpleITK.WriteImage(resampled_segmentation, segmentation_image_path)
+                return segmentation_image_path
+            elif isinstance(input_data, SimpleITK.Image):  # Return SimpleITK.Image if input was SimpleITK.Image
+                return resampled_segmentation
+            elif isinstance(input_data, tuple):  # Return numpy array if input was numpy array
+                return SimpleITK.GetArrayFromImage(resampled_segmentation)
+
+def lion_subject(subject: str, subject_index: int, number_of_subjects: int, model_routine: dict, accelerator: str,
+                  output_manager: system.OutputManager | None, threshold: int = None):
+    # SETTING UP DIRECTORY STRUCTURE
+    subject_name = os.path.basename(subject)
+
+    if output_manager is None:
+        output_manager = system.OutputManager(False, False)
+
+    output_manager.log_update(' ')
+    output_manager.log_update(f' SUBJECT: {subject_name}')
+
+    model_names = []
+    for workflows in model_routine.values():
+        for workflow in workflows:
+            model_names.append(workflow.target_model.model_identifier)
+
+    subject_peak_performance = None
+
+    output_manager.spinner_update(
+        f'[{subject_index + 1}/{number_of_subjects}] Setting up directory structure for {subject_name}...')
+    output_manager.log_update(' ')
+    output_manager.log_update(f' SETTING UP LION-Z DIRECTORY:')
+    output_manager.log_update(' ')
+    lion_dir, segmentations_dir, stats_dir = file_utilities.lion_folder_structure(subject)
+    output_manager.log_update(f" LION directory for subject {subject_name} at: {lion_dir}")
+
+    # RUN PREDICTION
+    start_time = time.time()
+    output_manager.log_update(' ')
+    output_manager.log_update(' RUNNING PREDICTION:')
+    output_manager.log_update(' ')
+
+    file_path = file_utilities.get_files(subject, 'PT_', ('.nii', '.nii.gz'))[0]
+    image = SimpleITK.ReadImage(file_path)
+    file_name = file_utilities.get_nifti_file_stem(file_path)
+
+    for desired_spacing, model_workflows in model_routine.items():
+        resampling_time_start = time.time()
+        resampled_array = image_processing.ImageResampler.resample_image_SimpleITK_DASK_array(image, 'bspline', desired_spacing)
+        output_manager.log_update(
+            f' - Resampling at {"x".join(map(str, desired_spacing))} took: {round((time.time() - resampling_time_start), 2)}s')
+
+        for model_workflow in model_workflows:
+            # ----------------------------------
+            # RUN MODEL WORKFLOW
+            # ----------------------------------
+            model_time_start = time.time()
+            output_manager.spinner_update(
+                f'[{subject_index + 1}/{number_of_subjects}] Running prediction for {subject_name} using {model_workflow[0]}...')
+            output_manager.log_update(f'   - Model {model_workflow.target_model}')
+            segmentation_array = predict.predict_from_array_by_iterator(resampled_array, model_workflow[0],
+                                                                        accelerator,
+                                                                        output_manager.nnunet_log_filename, threshold)
+
+            segmentation = SimpleITK.GetImageFromArray(segmentation_array)
+            segmentation.SetSpacing(desired_spacing)
+            segmentation.SetOrigin(image.GetOrigin())
+            segmentation.SetDirection(image.GetDirection())
+            resampled_segmentation = image_processing.ImageResampler.resample_segmentation(image, segmentation)
+
+            segmentation_image_path = os.path.join(segmentations_dir,
+                                                   f"{file_name}_tumor_seg.nii.gz")
+            output_manager.log_update(f'     - Writing segmentation for {model_workflow.target_model}')
+            SimpleITK.WriteImage(resampled_segmentation, segmentation_image_path)
+            output_manager.log_update(
+                f"     - Prediction complete for {model_workflow.target_model} within {round((time.time() - model_time_start) / 60, 1)} min.")
+
+            # ----------------------------------
+            # CREATING MIP
+            # ----------------------------------
+
+            output_manager.spinner_update(f'[{subject_index + 1}/{number_of_subjects}] Calculating fused MIP of PET image and tumor mask for {os.path.basename(subject)}...')
+
+            image_processing.create_rotational_mip_gif(image,
+                                                       resampled_segmentation,
+                                                       os.path.join(segmentations_dir,
+                                                                    os.path.basename(subject) +
+                                                                    '_rotational_mip.gif'),
+                                                       output_manager,
+                                                       rotation_step=constants.MIP_ROTATION_STEP,
+                                                       output_spacing=constants.MIP_VOXEL_SPACING)
+
+            output_manager.spinner_update(f'{constants.ANSI_GREEN} [{subject_index + 1}/{number_of_subjects}] Fused MIP of PET image and tumor mask ' \
+                           f'calculated' \
+                           f' for {os.path.basename(subject)}! ')
+            time.sleep(3)
+
+            # ----------------------------------
+            # EXTRACT TUMOR METRICS
+            # ----------------------------------
+
+            tumor_volume, average_intensity = image_processing.compute_tumor_metrics(file_path,
+                                                                                     segmentation_image_path, output_manager)
+            # if tumor_volume is zero then the segmentation should have a suffix _no_tumor_seg.nii.gz
+            if tumor_volume == 0:
+                os.rename(segmentation_image_path,
+                          os.path.join(segmentations_dir, os.path.basename(subject) + '_no_tumor_seg.nii.gz'))
+            image_processing.save_metrics_to_csv(tumor_volume, average_intensity, os.path.join(stats_dir,
+                                                                                               os.path.basename(
+                                                                                                   subject) +
+                                                                                               '_metrics.csv'))
+
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    output_manager.spinner_update(
+        f' {constants.ANSI_GREEN}[{subject_index + 1}/{number_of_subjects}] Prediction done for {subject_name} using {len(model_names)} model: '
+        f' | Elapsed time: {round(elapsed_time / 60, 1)} min{constants.ANSI_RESET}')
+    time.sleep(1)
+    output_manager.log_update(
+        f' Prediction done for {subject_name} using {len(model_names)} model: {", ".join(model_names)}!'
+        f' | Elapsed time: {round(elapsed_time / 60, 1)} min')
+
+    return subject_peak_performance
+
 
 if __name__ == '__main__':
     main()
