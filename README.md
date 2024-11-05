@@ -101,8 +101,7 @@ lionz -d /path/to/dummy/image/directory -m fdg -t 2.5
 ```
 **Generating a MIP with overalayed segmentation**
 
-If you want to have a quick glance at the segmentation by having a rotation MIP with the obtained segmentations overlayed all you need is to add the -gen-mip
-flag to your command.
+If you want to have a quick glance at the segmentation by having a rotation MIP with the obtained segmentations overlayed all you need is to add the -gen-mip flag to your command.
 
 Here's how you can apply thresholding for SUV 2.5:
 ```bash
