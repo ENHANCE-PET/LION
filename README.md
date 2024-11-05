@@ -126,7 +126,7 @@ from lionz import lion
 
 #### *Calling the `moose` Function* 🦌
 
-The `lion` function is versatile and accepts various input types. It takes four main arguments:
+The `lion` function is versatile and accepts various input types. It takes five main arguments:
 
 1. `input`: The data to process, which can be:
    - A path to an input file or directory (NIfTI, either `.nii` or `.nii.gz`).
