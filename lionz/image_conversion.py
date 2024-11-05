@@ -96,7 +96,7 @@ def standardize_to_nifti(parent_dir: str, output_manager: system.OutputManager) 
                 for image in images:
                     image_path = os.path.join(subject_path, image)
                     path_is_valid = os.path.isdir(image_path) | os.path.isfile(image_path)
-                    path_is_valid = path_is_valid & ("moosez" not in os.path.basename(image_path))
+                    path_is_valid = path_is_valid & ("lionz" not in os.path.basename(image_path))
                     if path_is_valid:
                         non_nifti_to_nifti(image_path, output_manager)
             else:

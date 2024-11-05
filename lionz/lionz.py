@@ -142,6 +142,14 @@ def main():
         help="Deactivate logging."
     )
 
+    parser.add_argument(
+        "-gen-mip", "--generate_mip",
+        required=False,
+        default=False,
+        action="store_true",
+        help="Use to skip mip creation"
+    )
+
     # Custom help option
     parser.add_argument(
         "-h", "--help",
@@ -168,6 +176,9 @@ def main():
 
     # Check for thresholding
     threshold = args.threshold
+
+    # Check for mip generation
+    generate_mip = args.generate_mip
 
     output_manager.configure_logging(parent_folder)
     output_manager.log_update('----------------------------------------------------------------------------------------------------')
@@ -267,7 +278,7 @@ def main():
     subject_performance_parameters = []
 
     for i, subject in enumerate(lion_compliant_subjects):
-        lion_subject(subject, i, num_subjects, model_routine, accelerator, output_manager, threshold)
+        lion_subject(subject, i, num_subjects, model_routine, accelerator, output_manager, threshold, generate_mip)
 
     end_total_time = time.time()
     total_elapsed_time = (end_total_time - start_total_time) / 60
@@ -380,7 +391,7 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
                 return SimpleITK.GetArrayFromImage(resampled_segmentation)
 
 def lion_subject(subject: str, subject_index: int, number_of_subjects: int, model_routine: dict, accelerator: str,
-                  output_manager: system.OutputManager | None, threshold: int = None):
+                  output_manager: system.OutputManager | None, threshold: int = None, generate_mip: bool = False):
     # SETTING UP DIRECTORY STRUCTURE
     subject_name = os.path.basename(subject)
 
@@ -449,22 +460,22 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
             # ----------------------------------
             # CREATING MIP
             # ----------------------------------
+            if generate_mip:
+                output_manager.spinner_update(f'[{subject_index + 1}/{number_of_subjects}] Calculating fused MIP of PET image and tumor mask for {os.path.basename(subject)}...')
 
-            output_manager.spinner_update(f'[{subject_index + 1}/{number_of_subjects}] Calculating fused MIP of PET image and tumor mask for {os.path.basename(subject)}...')
+                image_processing.create_rotational_mip_gif(image,
+                                                           resampled_segmentation,
+                                                           os.path.join(segmentations_dir,
+                                                                        os.path.basename(subject) +
+                                                                        '_rotational_mip.gif'),
+                                                           output_manager,
+                                                           rotation_step=constants.MIP_ROTATION_STEP,
+                                                           output_spacing=constants.MIP_VOXEL_SPACING)
 
-            image_processing.create_rotational_mip_gif(image,
-                                                       resampled_segmentation,
-                                                       os.path.join(segmentations_dir,
-                                                                    os.path.basename(subject) +
-                                                                    '_rotational_mip.gif'),
-                                                       output_manager,
-                                                       rotation_step=constants.MIP_ROTATION_STEP,
-                                                       output_spacing=constants.MIP_VOXEL_SPACING)
-
-            output_manager.spinner_update(f'{constants.ANSI_GREEN} [{subject_index + 1}/{number_of_subjects}] Fused MIP of PET image and tumor mask ' \
-                           f'calculated' \
-                           f' for {os.path.basename(subject)}! ')
-            time.sleep(3)
+                output_manager.spinner_update(f'{constants.ANSI_GREEN} [{subject_index + 1}/{number_of_subjects}] Fused MIP of PET image and tumor mask ' \
+                               f'calculated' \
+                               f' for {os.path.basename(subject)}! ')
+                time.sleep(3)
 
             # ----------------------------------
             # EXTRACT TUMOR METRICS

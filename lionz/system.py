@@ -8,15 +8,14 @@
 # Version: 2.0.0
 #
 # Description:
-# This module contains the urls and filenames of the models and binaries that are required for the moosez.
+# This module contains several functions to help manage outputs and retrieve system specifics for the lionz.
 #
 # Usage:
-# The variables in this module can be imported and used in other modules within the moosez to download the necessary
-# binaries and models for the moosez.
+# The variables in this module can be imported and used in other modules within the lionz to manage outputs and retrieve system specifics.
 #
 # ----------------------------------------------------------------------------------------------------------------------
 
-# This dictionary holds the pre-trained models available in MooseZ library.
+# This dictionary holds the pre-trained models available in LionZ library.
 # Each key is a unique model identifier following a specific syntax mentioned:
 # 'clin' or 'preclin' (indicating Clinical or Preclinical),
 # modality tag (like 'ct', 'pt', 'mr'), and then the tissue of interest.
@@ -83,9 +82,9 @@ class OutputManager:
 
         timestamp = datetime.now().strftime('%H-%M-%d-%m-%Y')
 
-        self.nnunet_log_filename = os.path.join(log_file_directory, f'moosez-v{VERSION}_nnUNet_{timestamp}.log')
+        self.nnunet_log_filename = os.path.join(log_file_directory, f'lionz-v{VERSION}_nnUNet_{timestamp}.log')
 
-        self.logger = logging.getLogger(f'moosez-v{VERSION}')
+        self.logger = logging.getLogger(f'lionz-v{VERSION}')
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = False
 
@@ -93,7 +92,7 @@ class OutputManager:
             log_format = '%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
             formatter = logging.Formatter(log_format)
 
-            log_filename = os.path.join(log_file_directory, f'moosez-v{VERSION}_{timestamp}.log')
+            log_filename = os.path.join(log_file_directory, f'lionz-v{VERSION}_{timestamp}.log')
             file_handler = logging.FileHandler(log_filename, mode='w')
             file_handler.setLevel(logging.INFO)
             file_handler.setFormatter(formatter)
