@@ -8,7 +8,7 @@ LIONZ Constants
 This module contains the constants that are used in the LIONZ project.
 
 .. moduleauthor:: Lalith Kumar Shiyam Sundar <lalith.shiyamsundar@meduniwien.ac.at>
-.. versionadded:: 0.1.0
+.. versionadded:: 0.10.0
 """
 
 import os
@@ -29,10 +29,13 @@ def get_virtual_env_root() -> str:
 
 # Get the root directory of the virtual environment
 project_root = get_virtual_env_root()
+BINARY_PATH = os.path.join(project_root, 'bin')
+VERSION = '0.10'
 
 # Define the paths to the trained models and the LIONZ model
 NNUNET_RESULTS_FOLDER = os.path.join(project_root, 'models', 'nnunet_trained_models')
 LIONZ_MODEL_FOLDER = os.path.join(NNUNET_RESULTS_FOLDER, 'nnUNet', '3d_fullres')
+
 
 # Define the allowed modalities
 ALLOWED_MODALITIES = ['CT', 'PT']
@@ -58,9 +61,8 @@ MATRIX_THRESHOLD = 200 * 200 * 600
 Z_AXIS_THRESHOLD = 200
 MARGIN_PADDING = 20
 INTERPOLATION = 'bspline'
-CHUNK_THRESHOLD = 200
+CHUNK_THRESHOLD_RESAMPLING = 150
 MARGIN_SCALING_FACTOR = 2
-
 # DISPLAY PARAMETERS
 
 MIP_ROTATION_STEP = 40
@@ -71,3 +73,28 @@ FRAME_DURATION = 0.4
 
 TRAINING_DATASET_SIZE_FDG = '1022' 
 TRAINING_DATASET_SIZE_PSMA = '812'
+
+# MODELS
+KEY_FOLDER_NAME = "folder_name"
+KEY_URL = "url"
+KEY_LIMIT_FOV = "limit_fov"
+KEY_DESCRIPTION = "description"
+KEY_DESCRIPTION_TEXT = "Tissue of Interest"
+KEY_DESCRIPTION_MODALITY = "Modality"
+KEY_DESCRIPTION_IMAGING = "Imaging"
+DEFAULT_SPACING = (1.5, 1.5, 1.5)
+FILE_NAME_DATASET_JSON = "dataset.json"
+FILE_NAME_PLANS_JSON = "plans.json"
+TUMOR_LABEL = 0
+
+
+USAGE_MESSAGE = """
+    Usage:
+      lionz -d <MAIN_DIRECTORY> -m <MODEL_NAME>
+    Example:  
+      lionz -d /Documents/Data_to_lionz/ -m clin_ct_lesions
+
+    Description:
+      LIONZ (Lesion segmentatION) - A state-of-the-art AI solution that
+      emphasizes precise lesion segmentation in diverse imaging datasets.
+    """

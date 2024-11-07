@@ -18,32 +18,11 @@ import io
 import os
 import re
 import unicodedata
-
 import SimpleITK
 import dicom2nifti
-import nibabel as nib
 import pydicom
-from rich.progress import Progress
-
-
-def read_dicom_folder(folder_path: str) -> SimpleITK.Image:
-    """
-    Reads a folder of DICOM files and returns the image.
-
-    :param folder_path: str
-        The path to the folder containing the DICOM files.
-    :type folder_path: str
-
-    :return: SimpleITK.Image
-        The image obtained from the DICOM files.
-    :rtype: SimpleITK.Image
-    """
-    reader = SimpleITK.ImageSeriesReader()
-    dicom_names = reader.GetGDCMSeriesFileNames(folder_path)
-    reader.SetFileNames(dicom_names)
-
-    dicom_image = reader.Execute()
-    return dicom_image
+from lionz import system
+from lionz import file_utilities
 
 
 def non_nifti_to_nifti(input_path: str, output_directory: str = None) -> None:
@@ -64,7 +43,6 @@ def non_nifti_to_nifti(input_path: str, output_directory: str = None) -> None:
         Usage:
         This function can be used to convert any image format known to ITK to NIFTI. If the input path is a directory, the function will convert all images in the directory to NIFTI format. If the input path is a file, the function will convert the file to NIFTI format. The output image will be written to the specified output directory, or to the same directory as the input image if no output directory is specified.
     """
-
     if not os.path.exists(input_path):
         print(f"Input path {input_path} does not exist.")
         return
@@ -93,12 +71,14 @@ def non_nifti_to_nifti(input_path: str, output_directory: str = None) -> None:
     SimpleITK.WriteImage(output_image, output_image_path)
 
 
-def standardize_to_nifti(parent_dir: str) -> None:
+def standardize_to_nifti(parent_dir: str, output_manager: system.OutputManager) -> None:
     """
     Converts all non-NIfTI images in a parent directory and its subdirectories to NIfTI format.
 
     :param parent_dir: The path to the parent directory containing the images to convert.
     :type parent_dir: str
+    :param output_manager: The output manager to handle console and log output.
+    :type output_manager: system.OutputManager
     :return: None
     """
     # Get a list of all subdirectories in the parent directory
@@ -106,19 +86,19 @@ def standardize_to_nifti(parent_dir: str) -> None:
     subjects = [subject for subject in subjects if os.path.isdir(os.path.join(parent_dir, subject))]
 
     # Convert all non-NIfTI images in each subdirectory to NIfTI format
-    with Progress() as progress:
+    progress = output_manager.create_progress_bar()
+    with progress:
         task = progress.add_task("[white] Processing subjects...", total=len(subjects))
         for subject in subjects:
             subject_path = os.path.join(parent_dir, subject)
             if os.path.isdir(subject_path):
                 images = os.listdir(subject_path)
                 for image in images:
-                    if os.path.isdir(os.path.join(subject_path, image)):
-                        image_path = os.path.join(subject_path, image)
-                        non_nifti_to_nifti(image_path)
-                    elif os.path.isfile(os.path.join(subject_path, image)):
-                        image_path = os.path.join(subject_path, image)
-                        non_nifti_to_nifti(image_path)
+                    image_path = os.path.join(subject_path, image)
+                    path_is_valid = os.path.isdir(image_path) | os.path.isfile(image_path)
+                    path_is_valid = path_is_valid & ("lionz" not in os.path.basename(image_path))
+                    if path_is_valid:
+                        non_nifti_to_nifti(image_path, output_manager)
             else:
                 continue
             progress.update(task, advance=1, description=f"[white] Processing {subject}...")
@@ -253,14 +233,6 @@ def rename_and_convert_nifti_files(nifti_dir: str, dicom_info: dict) -> None:
                 del dicom_info[filename]
 
 
-def copy_and_compress_nifti(src_path, dest_path):
-    """
-    Load the NIFTI file from src_path and save it with .nii.gz extension at dest_path.
-    """
-    img = nib.load(src_path)
-    nib.save(img, dest_path)
-
-
 def convert_bq_to_suv(bq_image: str, out_suv_image: str, suv_parameters: dict, image_unit: str,
                       suv_scale_factor) -> None:
     """
@@ -276,12 +248,12 @@ def convert_bq_to_suv(bq_image: str, out_suv_image: str, suv_parameters: dict, i
         total_dose = suv_parameters["total_dose[MBq]"]
         suv_denominator = (total_dose / suv_parameters["weight[kg]"]) * 1000  # Units in kBq/mL
         suv_convertor = 1 / suv_denominator
-        cmd_to_run = f"c3d {bq_image} -scale {suv_convertor} -o {out_suv_image}"
+        cmd_to_run = f"{file_utilities.get_c3d_path()} {bq_image} -scale {suv_convertor} -o {out_suv_image}"
         os.system(cmd_to_run)
 
     elif image_unit == 'CNTS':
         suv_convertor = float(suv_scale_factor)
-        cmd_to_run = f"c3d {bq_image} -scale {suv_convertor} -o {out_suv_image}"
+        cmd_to_run = f"{file_utilities.get_c3d_path()} {bq_image} -scale {suv_convertor} -o {out_suv_image}"
         os.system(cmd_to_run)
 
     else:
