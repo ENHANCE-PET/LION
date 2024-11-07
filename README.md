@@ -11,7 +11,7 @@
 
 
 
-LION has roared onto the scene, revolutionizing the way we view lesion segmentation. Born from the same lineage as MOOSE 2.0, LION is laser-focused on tumor segmentation. Our curated models, each crafted with precision, cater to various tracers, setting the gold standard in lesion detection.
+LION has roared onto the scene, revolutionizing the way we view lesion segmentation. Born from the same lineage as MOOSE 3.0, LION is laser-focused on tumor segmentation. Our curated models, each crafted with precision, cater to various tracers, setting the gold standard in lesion detection.
 
 ✨ **Exclusive Engineering Paradigm**: With LION, segmentation is not just a task; it's an orchestrated dance of models. Define workflows for each model, mix and match channels as some models thrive on PET/CT while others are optimized for just PET or CT. Run them in a sequence that maximizes output and efficiency. This unique trait of LION lets you tailor the process to your exact needs, making lesion segmentation an art of precision.
 
@@ -91,13 +91,21 @@ lionz -d /path/to/dummy/image/directory -m fdg
 ```
 **Thresholding Feature ✂️** 
 
-LION is also equipped with a thresholding feature to refine your segmentations. Adding -t to your command, applies thresholding of SUV 4 for FDG and SUV 1 for PSMA. 
+LION is also equipped with a thresholding feature to refine your segmentations. Just add -t and the value you want to use for thresholding. 
 
 **Important:** Thresholding is only supported with DICOM or SUV NIfTI inputs! If you don't require thresholding, feel free to use any LION-compliant input.
 
-Here's how you can apply thresholding:
+Here's how you can apply thresholding for SUV 2.5:
 ```bash
-lionz -d /path/to/dummy/image/directory -m fdg -t
+lionz -d /path/to/dummy/image/directory -m fdg -t 2.5
+```
+**Generating a MIP with overalayed segmentation**
+
+If you want to have a quick glance at the segmentation by having a rotation MIP with the obtained segmentations overlayed all you need is to add the -gen-mip flag to your command.
+
+Here's how you can apply thresholding for SUV 2.5:
+```bash
+lionz -d /path/to/dummy/image/directory -m fdg -gen-mip
 ```
 And, if you ever find yourself needing some guidance:
 ```bash
@@ -105,21 +113,60 @@ lionz -h
 ```
 This trusty command will spill all the beans about available models and their specialties.
 
-**Using LION as a Library** 📚
+### Using LION as a Library 📦🐍
 
-Want to integrate LION in your Python code? Here's how:
+LION isn't just a command-line powerhouse; it’s also a flexible library for Python projects. Here’s how to make the most of it:
 
-1. Import the core function.
+First, import the `lion` function from the `lionz` package in your Python script:
+
+ ```python
+from lionz import lion
+ ```
+
+#### *Calling the `moose` Function* 🦌
+
+The `lion` function is versatile and accepts various input types. It takes five main arguments:
+
+1. `input`: The data to process, which can be:
+   - A path to an input file or directory (NIfTI, either `.nii` or `.nii.gz`).
+   - A tuple containing a NumPy array and its spacing (e.g., `numpy_array`, `(spacing_x, spacing_y, spacing_z)`).
+   - A `SimpleITK` image object.
+2. `model_name`: The model name to use for segmentation.
+3. `output_dir`: The directory where the results will be saved.
+4. `accelerator`: The type of accelerator to use (`"cpu"`, `"cuda"`, or `"mps"` for Mac).
+5. `threshold`: The value to use for thresholding. Optional
+
+#### Examples 📂✂️💻
+
+Here are some examples to illustrate different ways to use the `lion` function:
+
+1. **Using a file path and multiple models:**
+    ```python
+    lion('/path/to/input/file', 'fdg', '/path/to/save/output', 'cuda', 2.5)
+    ```
+
+2. **Using a NumPy array with spacing:**
+    ```python
+    lion((numpy_array, (1.5, 1.5, 1.5)), 'psma', '/path/to/save/output', 'cuda', 2.5)
+    ```
+
+3. **Using a SimpleITK image:**
+    ```python
+    lion(simple_itk_image, 'fdg', '/path/to/save/output', 'cuda', 2.5)
+    ```
+    
+#### Usage of `lion()` in your code
+To use the `lion()` function, ensure that you wrap the function call within a main guard to prevent recursive process creation errors:
 ```python
 from lionz import lion
-```
-2. Set up your variables and call `lion`.
-```python
-model_name = 'your_model_name'
-input_dir = '/path_to_your_input'
-output_dir = '/path_to_your_output'
-accelerator = 'cuda_or_cpu'
-lion(model_name, input_dir, output_dir, accelerator)
+
+if __name__ == '__main__':
+    input_file = '/path/to/input/file'
+    model = 'fdg'
+    output_directory = '/path/to/save/output'
+    accelerator = 'cuda'
+    threshold = 2.5
+    lion(input_file, models, output_directory, accelerator, threshold)
 ```
 
 ---
@@ -165,32 +212,26 @@ For the FDG model, your dataset must be organized strictly according to the guid
 📂 FDG_data/
 │
 ├── 📁 Patient1
-│   ├── 📁 AnyFolderNameForPT
-│   │   ├── 📄 DICOM_File1.dcm
-│   │   ├── 📄 DICOM_File2.dcm
-│   │   └── ...
-│   └── 📁 AnyFolderNameForCT
+│   └── 📁 AnyFolderNameForPT
 │       ├── 📄 DICOM_File1.dcm
 │       ├── 📄 DICOM_File2.dcm
 │       └── ...
 ├── 📁 Patient2
-│   ├── 📄 PT_Patient2.nii
-│   └── 📄 CT_Patient2.nii
+│   └── 📄 PT_Patient2.nii
 └── 📁 Patient3
-    ├── 📄 PT_Patient3.nii.gz
-    └── 📄 CT_Patient3.nii.gz
+    └── 📄 PT_Patient3.nii.gz
 ```
 
 **Important Guidelines:**
 
 - Each patient's data must be stored in a dedicated folder.
 - For DICOM format:
-  - Patient1's example demonstrates the DICOM structure. Inside each patient's main folder, the inner folders can have any name for PT and CT modalities. Multiple DICOM files can be stored in these folders. The modality (PT or CT) will be inferred from the DICOM's modality tag.
+  - Patient1's example demonstrates the DICOM structure. Inside each patient's main folder, the inner folders can have any name for PT modality. Multiple DICOM files can be stored in these folders. The modality (PT) will be inferred from the DICOM's modality tag.
 - For NIFTI format:
-  - Patient2 and Patient3 examples demonstrate the NIFTI structure. For these, PT and CT modalities are directly within the patient's folder with the `.nii` extension. Adjust the naming structure as per the specifics of your dataset if required.
+  - Patient2 and Patient3 examples demonstrate the NIFTI structure. For these, PT modality is directly within the patient's folder with the `.nii` extension. Adjust the naming structure as per the specifics of your dataset if required.
   
 - Only DICOM and NIFTI formats are supported. No other imaging formats are allowed.
-- Adhering to these guidelines is non-negotiable for the FDG model.
+- Adhering to these guidelines is non-negotiable for both FDG and PSMA models.
 
 
 
@@ -203,40 +244,23 @@ When you run the FDG model, an output folder named `lionz-fdg-<timestamp>` will 
 ```
 📂 lionz-fdg-2023-09-18-10-07-25/
 │
-├── 📂 CT
-│   └── 📄 CT_0147.nii.gz
 │
 ├── 📂 PT
 │   └── 📄 PT_0147.nii.gz
 │
 ├── 📂 segmentations
 │   ├── 📄 0147_no_tumor_seg.nii.gz
-│   ├── 📽 0147_rotational_mip.gif
-│   ├── 📄 dataset.json
-│   ├── 📄 plans.json
-│   └── 📄 predict_from_raw_data_args.json
+│   └── 📽 0147_rotational_mip.gif (optional)
 │
-├── 📂 stats
-│   └── 📄 0147_metrics.csv
-│
-└── 📂 workflow
-    ├── 📂 fdg_pet
-    │   └── 📄 fdg_pet_0000.nii.gz
-    └── 📂 fdg_pet_ct
-        ├── 📄 fdg_pet_ct_0000.nii.gz
-        └── 📄 fdg_pet_ct_0001.nii.gz
+└── 📂 stats
+    └── 📄 0147_metrics.csv
 ```
 
 ## 📌 Breakdown:
-
-- 📂 **CT**: Contains CT images in `.nii.gz` format.
-- 📂 **PT**: Contains PT images in `.nii.gz` format.
 - 📂 **segmentations**: Houses all segmentation-related files.
   - 📄 NIFTI files showing segmentations.
-  - 📽 GIF files representing various views.
-  - 📄 JSON configuration and parameter files.
+  - 📽 GIF files representing various views. Only when requested by the user.
 - 📂 **stats**: Contains `.csv` files with metrics related to the analysis.
-- 📂 **workflow**: Houses intermediate files used/generated during the workflow, organized in subfolders for different steps.
 
 ---
 
