@@ -123,7 +123,7 @@ First, import the `lion` function from the `lionz` package in your Python script
 from lionz import lion
  ```
 
-#### *Calling the `moose` Function* 🦌
+#### *Calling the `lion` Function* 🦌
 
 The `lion` function is versatile and accepts various input types. It takes five main arguments:
 
