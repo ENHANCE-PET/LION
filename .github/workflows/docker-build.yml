@@ -32,5 +32,5 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            your-dockerhub-username/your-image-name:${{ env.VERSION }}
-            your-dockerhub-username/your-image-name:latest
+            your-dockerhub-username/lionz:${{ env.VERSION }}
+            your-dockerhub-username/lionz:latest
