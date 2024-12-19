@@ -19,6 +19,7 @@ import numpy as np
 from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
 from lionz.image_processing import threshold_segmentation
 from lionz import models
+from typing import Tuple, List, Dict, Iterator
 
 
 def initialize_predictor(model: models.Model, accelerator: str) -> nnUNetPredictor:
