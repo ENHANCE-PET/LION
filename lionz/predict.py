@@ -38,14 +38,19 @@ def initialize_predictor(model: models.Model, accelerator: str) -> nnUNetPredict
     return predictor
 
 
-def process_case(preprocessor, chunk: np.ndarray, chunk_properties: dict, predictor):
+def process_case(preprocessor, chunk: np.ndarray, chunk_properties: Dict, predictor: nnUNetPredictor, location: Tuple) -> Dict:
     data, seg = preprocessor.run_case_npy(chunk,
                                           None,
                                           chunk_properties,
                                           predictor.plans_manager,
                                           predictor.configuration_manager,
                                           predictor.dataset_json)
-    return {'data': torch.from_numpy(data).contiguous().pin_memory(), 'data_properties': chunk_properties, 'ofile': None}
+
+    data_tensor = torch.from_numpy(data).contiguous()
+    if predictor.device == "cuda":
+        data_tensor = data_tensor.pin_memory()
+
+    return {'data': data_tensor, 'data_properties': chunk_properties, 'ofile': None, 'location': location}
 
 
 def preprocessing_iterator_from_array(image_array: np.ndarray, image_properties: dict, predictor: nnUNetPredictor) -> iter:
