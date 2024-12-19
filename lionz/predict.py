@@ -39,7 +39,7 @@ def initialize_predictor(model: models.Model, accelerator: str) -> nnUNetPredict
     return predictor
 
 
-def process_case(preprocessor, chunk: np.ndarray, chunk_properties: Dict, predictor: nnUNetPredictor, location: Tuple) -> Dict:
+def process_case(preprocessor, chunk: np.ndarray, chunk_properties: Dict, predictor: nnUNetPredictor) -> Dict:
     data, seg = preprocessor.run_case_npy(chunk,
                                           None,
                                           chunk_properties,
@@ -51,7 +51,7 @@ def process_case(preprocessor, chunk: np.ndarray, chunk_properties: Dict, predic
     if predictor.device == "cuda":
         data_tensor = data_tensor.pin_memory()
 
-    return {'data': data_tensor, 'data_properties': chunk_properties, 'ofile': None, 'location': location}
+    return {'data': data_tensor, 'data_properties': chunk_properties, 'ofile': None}
 
 
 def preprocessing_iterator_from_array(image_array: np.ndarray, image_properties: dict, predictor: nnUNetPredictor) -> iter:
