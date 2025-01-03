@@ -2,6 +2,7 @@ import os
 import json
 import zipfile
 import requests
+import shutil 
 from lionz import system
 from lionz.constants import (KEY_FOLDER_NAME, KEY_URL, KEY_LIMIT_FOV, DEFAULT_SPACING, ANSI_GREEN, ANSI_RESET,
                              FILE_NAME_DATASET_JSON, FILE_NAME_PLANS_JSON, TUMOR_LABEL)
@@ -92,22 +93,58 @@ class Model:
         return dataset, plans
 
     def __download(self, output_manager: system.OutputManager):
-        if os.path.exists(self.directory):
-            output_manager.log_update(f"    - A local instance of {self.model_identifier} has been detected.")
-            output_manager.console_update(f"{ANSI_GREEN} A local instance of {self.model_identifier} has been detected. {ANSI_RESET}")
-            return
+        """
+        Download and extract the model if it does not exist locally
+        or if the existing folder has a different URL recorded.
+        """
 
-        output_manager.log_update(f"    - Downloading {self.model_identifier}")
+        # If folder already exists, check if we should remove it
+        if os.path.exists(self.directory):
+            # Attempt to load the previously saved URL from version file
+            version_file_path = os.path.join(self.directory, "model_version.json")
+            old_url = None
+
+            if os.path.exists(version_file_path):
+                try:
+                    with open(version_file_path, 'r') as vf:
+                        version_data = json.load(vf)
+                        old_url = version_data.get("url")
+                except Exception:
+                    pass  # If JSON is corrupted, we'll just treat it as mismatch
+
+            # If the existing folder's URL doesn't match the new URL, remove folder
+            if old_url != self.url:
+                output_manager.console_update(
+                    f" Model version mismatch detected for '{self.model_identifier}'. Removing outdated model and downloading the latest model..."
+
+                )
+                shutil.rmtree(self.directory, ignore_errors=True)
+            else:
+                # If the URL matches, we skip re-downloading
+                output_manager.log_update(
+                    f"    - A local instance of {self.model_identifier} has been detected."
+                )
+                output_manager.console_update(
+                    f"{ANSI_GREEN} A local instance of {self.model_identifier} has been detected. {ANSI_RESET}"
+                )
+                return
+
+        # If folder doesn't exist or has been removed, proceed to download
         if not os.path.exists(system.MODELS_DIRECTORY_PATH):
             os.makedirs(system.MODELS_DIRECTORY_PATH)
 
+        if not self.url:
+            raise ValueError(f" No URL specified for model '{self.model_identifier}'.")
+
+        output_manager.log_update(f"    - Downloading {self.model_identifier}")
         download_file_name = os.path.basename(self.url)
         download_file_path = os.path.join(system.MODELS_DIRECTORY_PATH, download_file_name)
 
         response = requests.get(self.url, stream=True)
         if response.status_code != 200:
             output_manager.log_update(f"    X Failed to download model from {self.url}")
-            raise Exception(f"Failed to download model from {self.url}")
+            raise Exception(f" Failed to download model from {self.url}")
+
         total_size = int(response.headers.get("Content-Length", 0))
         chunk_size = 1024 * 10
 
@@ -119,22 +156,35 @@ class Model:
                     if chunk:
                         f.write(chunk)
                         progress.update(task, advance=chunk_size)
-        output_manager.log_update(f"    - {self.model_identifier} ({self.folder_name} downloaded.")
 
+        output_manager.log_update(
+            f"    - {self.model_identifier} ({self.folder_name}) downloaded."
+        )
+
+        # Extract
         progress = output_manager.create_file_progress_bar()
         with progress:
             with zipfile.ZipFile(download_file_path, 'r') as zip_ref:
-                total_size = sum((file.file_size for file in zip_ref.infolist()))
+                total_size = sum(file.file_size for file in zip_ref.infolist())
                 task = progress.add_task(f"[white] Extracting {self.model_identifier}...", total=total_size)
                 for file in zip_ref.infolist():
                     zip_ref.extract(file, system.MODELS_DIRECTORY_PATH)
                     progress.update(task, advance=file.file_size)
+
         output_manager.log_update(f"    - {self.model_identifier} extracted.")
-
         os.remove(download_file_path)
-        output_manager.log_update(f"    - {self.model_identifier} - setup complete.")
-        output_manager.console_update(f"{ANSI_GREEN} {self.model_identifier} - setup complete. {ANSI_RESET}")
 
+        # Save a small version file with the URL
+        os.makedirs(self.directory, exist_ok=True)
+        version_file_path = os.path.join(self.directory, "model_version.json")
+        with open(version_file_path, 'w') as vf:
+            json.dump({"url": self.url}, vf)
+
+        output_manager.log_update(f"    - {self.model_identifier} - setup complete.")
+        output_manager.console_update(
+            f"{ANSI_GREEN} {self.model_identifier} - setup complete. {ANSI_RESET}"
+        )
+        
     def __get_organ_indices(self) -> dict[int, str]:
         labels = self.dataset.get('labels', {})
         return {int(value): key for key, value in labels.items() if value != "0"}
