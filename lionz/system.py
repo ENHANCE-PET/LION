@@ -36,6 +36,7 @@ import os
 import sys
 import emoji
 import pyfiglet
+import importlib.metadata
 from halo import Halo
 from datetime import datetime
 from rich.console import Console, RenderableType
@@ -132,8 +133,9 @@ class OutputManager:
 
         :return: None
         """
+        version = importlib.metadata.version("lionz")
         self.console_update(' ')
-        result = ANSI_VIOLET + pyfiglet.figlet_format(" LION 0.10.0", font="smslant").rstrip() + ANSI_RESET
+        result = ANSI_VIOLET + pyfiglet.figlet_format(f" LION {version}", font="smslant").rstrip() + ANSI_RESET
         text = ANSI_VIOLET + " A part of the ENHANCE community. Join us at www.enhance.pet to build the future of" \
                              " PET imaging together." + ANSI_RESET
         self.console_update(result)
