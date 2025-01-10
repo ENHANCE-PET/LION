@@ -71,7 +71,8 @@ from datetime import datetime
 import colorama
 import emoji
 import SimpleITK
-
+import multiprocessing as mp
+import concurrent.futures
 
 from lionz import constants
 from lionz import file_utilities
@@ -150,6 +151,14 @@ def main():
         help="Use to skip mip creation"
     )
 
+    parser.add_argument(
+        '-pride', '--lions_pride',
+        nargs='?',
+        const=2,
+        type=int,
+        help='Specify the concurrent jobs (default: 2)'
+    )
+
     # Custom help option
     parser.add_argument(
         "-h", "--help",
@@ -169,7 +178,6 @@ def main():
     output_manager.display_authors()
     output_manager.display_citation()
 
-
     # Get the main directory and model name
     parent_folder = os.path.abspath(args.main_directory)
     model_name = args.model_name
@@ -179,6 +187,8 @@ def main():
 
     # Check for mip generation
     generate_mip = args.generate_mip
+
+    lion_instances = args.lions_pride
 
     output_manager.configure_logging(parent_folder)
     output_manager.log_update('----------------------------------------------------------------------------------------------------')
@@ -234,6 +244,9 @@ def main():
     else:
         output_manager.log_update(f"Input validation successful.")
 
+    if lion_instances is not None:
+        output_manager.console_update(f" Number of moose instances run in parallel: {lion_instances}")
+
 
     # ------------------------------
     # INPUT STANDARDIZATION
@@ -275,10 +288,30 @@ def main():
     output_manager.spinner_start()
     start_total_time = time.time()
 
-    subject_performance_parameters = []
+    if lion_instances is not None:
+        output_manager.log_update(f"- Branching out with {lion_instances} concurrent jobs.")
 
-    for i, subject in enumerate(lion_compliant_subjects):
-        lion_subject(subject, i, num_subjects, model_routine, accelerator, output_manager, threshold, generate_mip)
+        mp_context = mp.get_context('spawn')
+        processed_subjects = 0
+        output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
+
+        if device_count is not None and device_count > 1:
+            accelerator_assignments = [f"{accelerator}:{i % device_count}" for i in range(len(subjects))]
+        else:
+            accelerator_assignments = [accelerator] * len(subjects)
+
+        with concurrent.futures.ProcessPoolExecutor(max_workers=lion_instances, mp_context=mp_context) as executor:
+            futures = []
+            for i, (subject, accelerator) in enumerate(zip(lion_compliant_subjects, accelerator_assignments)):
+                futures.append(executor.submit(lion_subject, subject, i, num_subjects, model_routine, accelerator, None, threshold, generate_mip))
+
+            for _ in concurrent.futures.as_completed(futures):
+                processed_subjects += 1
+                output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
+
+    else:
+        for i, subject in enumerate(lion_compliant_subjects):
+            lion_subject(subject, i, num_subjects, model_routine, accelerator, output_manager, threshold, generate_mip)
 
     end_total_time = time.time()
     total_elapsed_time = (end_total_time - start_total_time) / 60
@@ -311,8 +344,8 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
                        - tuple[numpy.ndarray, tuple[float, float, float]]: A tuple containing a numpy array and spacing.
                        - SimpleITK.Image: An image object to process.
 
-    :param model_names: The name(s) of the model(s) to be used for segmentation.
-    :type model_names: str or list[str]
+    :param model_name: The name(s) of the model(s) to be used for segmentation.
+    :type model_name: str or list[str]
 
     :param output_dir: Path to the directory where the output will be saved if the input is a file path.
     :type output_dir: Optional[str]
@@ -328,9 +361,9 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
 
     :Example:
 
-    >>> lion('/path/to/input/images', 'model_name', '/path/to/save/output', 'cuda', threshold_value)
-    >>> lion((numpy_array, (3, 3, 3)), 'model_name', '/path/to/save/output', 'cuda', threshold_value)
-    >>> lion(simple_itk_image, 'model_name', '/path/to/save/output', 'cuda', threshold_value)
+    >>> lion('/path/to/input/images', 'model_name', '/path/to/save/output', 'cuda', threshold)
+    >>> lion((numpy_array, (3, 3, 3)), 'model_name', '/path/to/save/output', 'cuda', threshold)
+    >>> lion(simple_itk_image, 'model_name', '/path/to/save/output', 'cuda', threshold)
 
     """
     # Load the image and set a default filename based on input type
@@ -389,6 +422,7 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
                 return resampled_segmentation
             elif isinstance(input_data, tuple):  # Return numpy array if input was numpy array
                 return SimpleITK.GetArrayFromImage(resampled_segmentation)
+
 
 def lion_subject(subject: str, subject_index: int, number_of_subjects: int, model_routine: dict, accelerator: str,
                   output_manager: system.OutputManager | None, threshold: int = None, generate_mip: bool = False):
@@ -472,8 +506,8 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
                                                            rotation_step=constants.MIP_ROTATION_STEP,
                                                            output_spacing=constants.MIP_VOXEL_SPACING)
 
-                output_manager.spinner_update(f'{constants.ANSI_GREEN} [{subject_index + 1}/{number_of_subjects}] Fused MIP of PET image and tumor mask ' \
-                               f'calculated' \
+                output_manager.spinner_update(f'{constants.ANSI_GREEN} [{subject_index + 1}/{number_of_subjects}] Fused MIP of PET image and tumor mask '
+                               f'calculated'
                                f' for {os.path.basename(subject)}! ')
                 time.sleep(3)
 
