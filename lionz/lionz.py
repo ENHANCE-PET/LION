@@ -245,7 +245,7 @@ def main():
         output_manager.log_update(f"Input validation successful.")
 
     if lion_instances is not None:
-        output_manager.console_update(f" Number of moose instances run in parallel: {lion_instances}")
+        output_manager.console_update(f" Number of lion instances run in parallel: {lion_instances}")
 
 
     # ------------------------------
