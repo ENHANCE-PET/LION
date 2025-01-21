@@ -5,7 +5,6 @@ AUTHORS = [
     ("Lalith Kumar Shiyam Sundar", "lalith.shiyamsundar@meduniwien.ac.at"),
     ("Sebastian Gutschmayer", "sebastian.gutschmayer@meduniwien.ac.at"),
     ("Manuel Pires", "manuel.pires@meduniwien.ac.at"),
-    ("Zacharias Chalampalakis", "Zacharias.Chalampalakis@meduniwien.ac.at"),
 ]
 
 # Convert the authors to a formatted string
