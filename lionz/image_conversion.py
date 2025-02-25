@@ -118,7 +118,6 @@ def standardize_to_nifti(parent_dir: str, output_manager: system.OutputManager) 
                 progress.update(task, advance=1, description=f"[white] Processing {subject}...")
 
 
-
 def dcm2niix(input_path: str) -> str:
     """
     Converts DICOM images into NIfTI images using dcm2niix.
@@ -196,9 +195,11 @@ def create_dicom_lookup(dicom_dir: str) -> dict:
             series_instance_UID = ds.SeriesInstanceUID if 'SeriesInstanceUID' in ds else None
             modality = ds.Modality
             if modality == "PT":
+                DICOM_PET_parameters = get_DICOM_PET_parameters(full_path)
+                corrected_activity = compute_corrected_activity(DICOM_PET_parameters)
                 suv_parameters = {'weight[kg]': ds.PatientWeight,
-                          'total_dose[MBq]': (
-                                      float(ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose) / 1000000)}
+                                  'total_dose[MBq]': (float(ds.RadiopharmaceuticalInformationSequence[0].RadionuclideTotalDose) / 1000000),
+                                  'total_dose[MBq]_corrected': corrected_activity / 1000000}
                 units = ds.Units
                 if units == "CNTS":
                     suv_converstion_factor = ds[0x7053, 0x1000].value
@@ -260,7 +261,10 @@ def convert_bq_to_suv(bq_image: str, out_suv_image: str, suv_parameters: dict, i
     """
 
     if image_unit == 'BQML':
-        total_dose = suv_parameters["total_dose[MBq]"]
+        if suv_parameters["total_dose[MBq]_corrected"]:
+            total_dose = suv_parameters["total_dose[MBq]_corrected"]
+        else:
+            total_dose = suv_parameters["total_dose[MBq]"]
         suv_denominator = (total_dose / suv_parameters["weight[kg]"]) * 1000  # Units in kBq/mL
         suv_convertor = 1 / suv_denominator
         cmd_to_run = f"{file_utilities.get_c3d_path()} {bq_image} -scale {suv_convertor} -o {out_suv_image}"
@@ -271,5 +275,72 @@ def convert_bq_to_suv(bq_image: str, out_suv_image: str, suv_parameters: dict, i
         cmd_to_run = f"{file_utilities.get_c3d_path()} {bq_image} -scale {suv_convertor} -o {out_suv_image}"
         os.system(cmd_to_run)
 
-    else:
-        print('Please specify a conversion factor.')
+
+# SUV computation is based on the guidelines of the Quantitative Imaging Biomarkers Alliance, mainly taken from:
+# - https://qibawiki.rsna.org/index.php/Standardized_Uptake_Value_(SUV)
+# - https://qibawiki.rsna.org/images/6/62/SUV_vendorneutral_pseudocode_happypathonly_20180626_DAC.pdf
+def get_DICOM_PET_parameters(dicom_file_path: str) -> dict:
+    """
+    Get DICOM parameters from DICOM tags using pydicom
+    :param dicom_file_path: Path to the DICOM file to get the SUV parameters from
+    :return: DICOM_parameters, a dictionary with DICOM parameters
+    """
+    ds = pydicom.dcmread(dicom_file_path, stop_before_pixels=True)
+    DICOM_parameters = {'PatientWeight': tag_to_float(ds.get('PatientWeight', None)),
+                        'AcquisitionDate': ds.get('AcquisitionDate', None),
+                        'AcquisitionTime': ds.get('AcquisitionTime', None),
+                        'SeriesTime': ds.get('SeriesTime', None),
+                        'DecayFactor': tag_to_float(ds.get('DecayFactor', None)),
+                        'DecayCorrection': ds.get('DecayCorrection', None),
+                        'RadionuclideTotalDose': None,
+                        'RadiopharmaceuticalStartTime': None,
+                        'RadionuclideHalfLife': None}
+
+    if 'RadiopharmaceuticalInformationSequence' in ds:
+        radiopharmaceutical_information = ds.RadiopharmaceuticalInformationSequence[0]
+        DICOM_parameters['RadionuclideTotalDose'] = tag_to_float(radiopharmaceutical_information.get('RadionuclideTotalDose', None))
+        DICOM_parameters['RadiopharmaceuticalStartTime'] = radiopharmaceutical_information.get('RadiopharmaceuticalStartTime', None)
+        DICOM_parameters['RadionuclideHalfLife'] = tag_to_float(radiopharmaceutical_information.get('RadionuclideHalfLife', None))
+    return DICOM_parameters
+
+
+def tag_to_float(tag: str) -> float | None:
+    if tag is None:
+        return None
+    return float(tag)
+
+
+def tag_to_time_seconds(tag: str) -> int | None:
+    if tag is None:
+        return None
+    time = tag.split('.')[0]
+    hours, minutes, seconds = int(time[0:2]), int(time[2:4]), int(time[4:6])
+    time_seconds = hours * 3600 + minutes * 60 + seconds
+    return time_seconds
+
+
+def get_time_difference_seconds(time_1: str, time_2: str) -> int | None:
+    time_1_seconds = tag_to_time_seconds(time_1)
+    time_2_seconds = tag_to_time_seconds(time_2)
+    if time_1_seconds is None or time_2_seconds is None:
+        return None
+
+    time_difference_seconds = time_1_seconds - time_2_seconds
+    return time_difference_seconds
+
+
+def compute_corrected_activity(patient_parameters: dict) -> float | None:
+    radiopharmaceutical_start_time = patient_parameters['RadiopharmaceuticalStartTime']
+    series_time = patient_parameters['SeriesTime']
+    injection_to_scan_time = get_time_difference_seconds(series_time, radiopharmaceutical_start_time)
+    radionuclide_total_dose = patient_parameters['RadionuclideTotalDose']
+    radionuclide_half_life = patient_parameters['RadionuclideHalfLife']
+
+    if injection_to_scan_time is None or radionuclide_half_life is None:
+        if radionuclide_total_dose is None:
+            return None
+        else:
+            return radionuclide_total_dose
+
+    decay_corrected_activity = radionuclide_total_dose * pow(2.0, -(injection_to_scan_time / radionuclide_half_life))
+    return decay_corrected_activity
