@@ -9,7 +9,7 @@ from lionz.constants import (KEY_FOLDER_NAME, KEY_URL, KEY_LIMIT_FOV, DEFAULT_SP
 
 MODEL_METADATA = {
     "psma": {
-        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_psma_ap550_MTIC263_15072024.zip",
+        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_psma_1005_11032025.zip",
         KEY_FOLDER_NAME: "Dataset711_PSMA",
         TUMOR_LABEL: 6
     },
