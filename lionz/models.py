@@ -14,7 +14,7 @@ MODEL_METADATA = {
         TUMOR_LABEL: 6
     },
     "fdg": {
-        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_fdg_4019_tumor_17022025.zip",
+        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_fdg_4348.zip",
         KEY_FOLDER_NAME: "Dataset789_Tumors",
         TUMOR_LABEL: 11
     },
