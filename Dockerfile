@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install LION from PyPI
-RUN pip install lionz
+RUN pip install --no-cache-dir --upgrade lionz
 
 # Set working directory
 WORKDIR /app
