@@ -13,7 +13,7 @@ emails_string = ", ".join([email for name, email in AUTHORS])
 
 setup(
     name='lionz',
-    version='0.15.2',
+    version='0.15.3',
     packages=find_packages(),
     install_requires=[
         'acvl-utils==0.2',
