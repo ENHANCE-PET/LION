@@ -42,7 +42,7 @@ Navigating the installation process is a breeze. Just follow the steps below:
 **For Linux and MacOS** 🐧🍏
 1. Create a Python environment, for example, 'lion-env'.
 ```bash
-python3 -m venv lion-env
+python3.10 -m venv lion-env
 ```
 2. Activate your environment.
 ```bash
@@ -53,6 +53,24 @@ source lion-env/bin/activate  # for MacOS
 ```bash
 pip install lionz
 ```
+## For Macs powered by Apple Silicon (M series chips with MPS) 🍏
+
+1. First, create a Python environment. You can name it to your liking; for example, 'lion-env'.
+   ```bash
+   python3.10 -m venv lion-env
+   ```
+
+2. Activate your newly created environment.
+   ```bash
+   source lion-env/bin/activate 
+   ```
+
+3. Install LION and a special fork of PyTorch (MPS specific). You need to install the MPS specific branch for making LION work with MPS
+   ```bash
+   pip install lionz
+   pip install git+https://github.com/LalithShiyam/pytorch-mps.git
+   ```
+Now you are ready to use LION on Apple Silicon 🏎⚡️.
 
 **For Windows** 🪟
 1. Set up a Python environment, say 'lion-env'.
