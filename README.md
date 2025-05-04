@@ -72,6 +72,8 @@ pip install lionz
    ```
 Now you are ready to use LION on Apple Silicon 🏎⚡️.
 
+Note: Please make sure you have the right version of `cmake`, as well as `ninja` installed. Also you need `git`, `xcode command line tools` installed. Using `brew` is the safest option. If you don't - the installation will complain, but you will see which version is needed. And ask `chatGPT` for help with your terminal output, every mac seems to be different and we can't give you a concrete suggestion. Sorry.
+
 **For Windows** 🪟
 1. Set up a Python environment, say 'lion-env'.
 ```bash
