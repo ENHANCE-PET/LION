@@ -90,12 +90,13 @@ pip install lionz
 ```
 
 ---
-### 🧬 Supported Models by Tracer
 
-| Tracer | Model Name |       Status        |    Training Dataset Size    |                Cancer Type                 |
-|--------|------------|---------------------|------------------------------|--------------------------------------------|
-| FDG    | `fdg`      | ✅ Stable & validated | 5,341 patients (multicenter) | `breast` `melanoma` `lung` `lymphoma` `colorectal` |
-| PSMA   | `psma`     | 🔧 In development     | ~1,200 patients (in progress) | `prostate`                                 |
+## 🧬 Supported Models by Tracer
+
+| Tracer | Model Name |        Status         |     Training Dataset Size     |                Cancer Type                 |
+|:------:|:----------:|:---------------------:|:------------------------------:|:------------------------------------------:|
+|  FDG   |   `fdg`    | ✅ Stable & validated  |  5,341 patients (multicenter)  | `breast` `melanoma` `lung` `lymphoma` `colorectal` |
+| PSMA   |  `psma`    |  🔧 In development     | ~1,200 patients (in progress)  |                `prostate`                  |
 
 ---
 
