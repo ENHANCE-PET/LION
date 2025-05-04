@@ -31,7 +31,7 @@ For an optimal experience with LION, ensure the following:
 - **Operating System**: LION runs smoothly on Windows, Mac, or Linux.
 - **Memory**: At least 32GB of RAM ensures LION operates without a hitch.
 - **GPU**: For blazing-fast results, an NVIDIA GPU comes highly recommended. But if you don't have one, fret not! LION will still get the job done, just at a more leisurely pace.
-- **Python**: Version 3.9.2 or above. We like to stay updated!
+- **Python**: Version 3.10!
 
 ---
 
