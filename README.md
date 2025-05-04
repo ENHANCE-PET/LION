@@ -91,7 +91,7 @@ pip install lionz
 
 ---
 
-## 🧬 Supported Models by Tracer
+## 🧬 Supported Models by Tracer Type
 
 | Tracer | Model Name |        Status         |     Training Dataset Size     |                Cancer Type                 |
 |:------:|:----------:|:---------------------:|:------------------------------:|:------------------------------------------:|
