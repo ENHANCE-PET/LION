@@ -83,8 +83,7 @@ from lionz import system
 from lionz import models
 from lionz import predict
 from lionz.models import AVAILABLE_MODELS
-from lionz import resources
-from lionz import download
+
 
 from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2
 
