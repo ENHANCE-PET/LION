@@ -83,8 +83,7 @@ from lionz import system
 from lionz import models
 from lionz import predict
 from lionz.models import AVAILABLE_MODELS
-from lionz import resources
-from lionz import download
+
 
 from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2
 
@@ -194,22 +193,6 @@ def main():
     output_manager.log_update('----------------------------------------------------------------------------------------------------')
     output_manager.log_update('                                     STARTING LIONZ-v.0.10.0                                         ')
     output_manager.log_update('----------------------------------------------------------------------------------------------------')
-
-    # ----------------------------------
-    # DOWNLOADING THE BINARIES
-    # ----------------------------------
-
-    print('')
-    print(f'{constants.ANSI_VIOLET} {emoji.emojize(":globe_with_meridians:")} BINARIES DOWNLOAD:{constants.ANSI_RESET}')
-
-    print('')
-    binary_path = constants.BINARY_PATH
-    file_utilities.create_directory(binary_path)
-    system_os, system_arch = file_utilities.get_system()
-    output_manager.console_update(f' Detected system: {system_os} | Detected architecture: {system_arch}')
-    download.download(item_name=f'{system_os}-{system_arch}', item_path=binary_path,
-                      item_dict=resources.BINARIES, output_manager=output_manager)
-    file_utilities.set_permissions(file_utilities.get_c3d_path(), system_os, output_manager)
 
     # ------------------------------
     # DOWNLOAD THE MODEL
@@ -384,13 +367,6 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
             "a SimpleITK.Image, or a tuple (numpy array, spacing)."
         )
     output_manager = system.OutputManager(False, False)
-
-    binary_path = constants.BINARY_PATH
-    file_utilities.create_directory(binary_path)
-    system_os, system_arch = file_utilities.get_system()
-    download.download(item_name=f'{system_os}-{system_arch}', item_path=binary_path,
-                      item_dict=resources.BINARIES, output_manager=output_manager)
-    file_utilities.set_permissions(file_utilities.get_c3d_path(), system_os, output_manager)
 
     model_path = system.MODELS_DIRECTORY_PATH
     file_utilities.create_directory(model_path)
