@@ -249,31 +249,45 @@ def rename_and_convert_nifti_files(nifti_dir: str, dicom_info: dict) -> None:
                 del dicom_info[filename]
 
 
-def convert_bq_to_suv(bq_image: str, out_suv_image: str, suv_parameters: dict, image_unit: str,
-                      suv_scale_factor) -> None:
+def convert_bq_to_suv(bq_image: str, out_suv_image: str, suv_parameters: dict, image_unit: str, suv_scale_factor) -> None:
     """
-    Convert a becquerel PET image to SUV image
-    :param bq_image: Path to a becquerel PET image to convert to SUV image (can be NRRD, NIFTI, ANALYZE
-    :param out_suv_image: Name of the SUV image to be created (preferrably with a path)
+    Convert a becquerel or counts PET image to SUV image using SimpleITK.
+    :param bq_image: Path to a becquerel PET image to convert to SUV image (can be NRRD, NIFTI, ANALYZE)
+    :param out_suv_image: Name of the SUV image to be created (preferably with a path)
     :param suv_parameters: A dictionary with the SUV parameters (weight in kg, dose in mBq)
     :param image_unit: A string indicating the unit of the PET image ('CNTS' or 'BQML')
-    :param suv_scale_factor: A number contained in the dicom tag [7053, 1000] for converting CNTS PT images to SUV ones
+    :param suv_scale_factor: A number contained in the DICOM tag [7053,1000] for converting CNTS PET images to SUV
     """
+    # Read input image
+    image = SimpleITK.ReadImage(bq_image)
 
-    if image_unit == 'BQML':
-        if suv_parameters["total_dose[MBq]_corrected"]:
-            total_dose = suv_parameters["total_dose[MBq]_corrected"]
-        else:
-            total_dose = suv_parameters["total_dose[MBq]"]
-        suv_denominator = (total_dose / suv_parameters["weight[kg]"]) * 1000  # Units in kBq/mL
-        suv_convertor = 1 / suv_denominator
-        cmd_to_run = f"{file_utilities.get_c3d_path()} {bq_image} -scale {suv_convertor} -o {out_suv_image}"
-        os.system(cmd_to_run)
+    # Determine the scale factor for BQML images
+    if image_unit.upper() == 'BQML':
+        # use corrected dose if available, else raw dose
+        total_dose = (
+            suv_parameters.get("total_dose[MBq]_corrected")
+            or suv_parameters["total_dose[MBq]"]
+        )
+        weight = suv_parameters["weight[kg]"]
+        # denominator in kBq/mL
+        suv_denominator = (total_dose / weight) * 1000.0
+        suv_convertor = 1.0 / suv_denominator
 
-    elif image_unit == 'CNTS':
+    # Or for counts images, use the provided scale factor
+    elif image_unit.upper() == 'CNTS':
         suv_convertor = float(suv_scale_factor)
-        cmd_to_run = f"{file_utilities.get_c3d_path()} {bq_image} -scale {suv_convertor} -o {out_suv_image}"
-        os.system(cmd_to_run)
+
+    else:
+        raise ValueError(f"Unsupported image unit: '{image_unit}'")
+
+    # Apply scaling via a ShiftScale filter
+    ss_filter = SimpleITK.ShiftScaleImageFilter()
+    ss_filter.SetShift(0.0)
+    ss_filter.SetScale(suv_convertor)
+    suv_image = ss_filter.Execute(image)
+
+    # Write out the SUV image
+    SimpleITK.WriteImage(suv_image, out_suv_image)
 
 
 # SUV computation is based on the guidelines of the Quantitative Imaging Biomarkers Alliance, mainly taken from:
