@@ -92,7 +92,7 @@ USAGE_MESSAGE = """
     Usage:
       lionz -d <MAIN_DIRECTORY> -m <MODEL_NAME>
     Example:  
-      lionz -d /Documents/Data_to_lionz/ -m clin_ct_lesions
+      lionz -d /Documents/Data_to_lionz/ -m fdg
 
     Description:
       LIONZ (Lesion segmentatION) - A state-of-the-art AI solution that

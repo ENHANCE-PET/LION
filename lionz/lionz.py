@@ -105,7 +105,6 @@ def main():
     parser.add_argument(
         "-d", "--main_directory",
         type=str,
-        required=True,
         metavar="<MAIN_DIRECTORY>",
         help="Specify the main directory containing subject folders."
     )
@@ -116,7 +115,6 @@ def main():
         "-m", "--model_name",
         type=str,
         choices=AVAILABLE_MODELS,
-        required=True,
         metavar="<MODEL_NAME>",
         help=model_help_text
     )
@@ -158,6 +156,22 @@ def main():
         help='Specify the concurrent jobs (default: 2)'
     )
 
+    parser.add_argument(
+        '-md', '--model_download',
+        nargs='+',
+        type=str,
+        choices=models.AVAILABLE_MODELS,
+        metavar="<MODEL_NAMES>",
+        help='Download one or more models from the model zoo without running segmentation.'
+    )
+
+    parser.add_argument(
+        '-md-out', '--model_download_directory',
+        type=str,
+        default=None,
+        help='Specify a custom directory to dump downloaded models.'
+    )
+
     # Custom help option
     parser.add_argument(
         "-h", "--help",
@@ -177,6 +191,53 @@ def main():
     output_manager.display_authors()
     output_manager.display_citation()
 
+
+    # ------------------------------
+    # ONLY DOWNLOAD THE MODELS
+    # ------------------------------
+
+    if args.model_download:
+        output_manager.console_update(
+            f'\n{constants.ANSI_VIOLET} {emoji.emojize(":package:")} INITIATING MODEL(S) DOWNLOAD: {constants.ANSI_RESET}\n')
+
+        output_manager.console_update("")
+
+        # Check whether user provided a custom path
+        using_default_path = args.model_download_directory is None
+        custom_root = os.path.abspath(args.model_download_directory or system.MODELS_DIRECTORY_PATH)
+
+        # Avoid double nesting if already models/nnunet_trained_models
+        if os.path.basename(custom_root) == "nnunet_trained_models" and os.path.basename(
+                os.path.dirname(custom_root)) == "models":
+            model_output_path = custom_root
+        else:
+            model_output_path = os.path.join(custom_root, "models", "nnunet_trained_models")
+
+        if using_default_path:
+            output_manager.console_update(
+                f' {emoji.emojize(":warning:")} No model output path specified. Using default: {constants.ANSI_ORANGE} {model_output_path}{constants.ANSI_RESET}')
+
+        for model_name in args.model_download:
+            if not models.Model.model_identifier_valid(model_name, output_manager):
+                output_manager.console_update(
+                    f"{constants.ANSI_RED} ✖ Invalid model: {model_name}{constants.ANSI_RESET}")
+                continue
+            models.Model(model_name, output_manager, override_directory=model_output_path)
+
+        # Docker bind hint
+        docker_bind = os.path.abspath(os.path.join(model_output_path, ".."))  # parent of nnunet_trained_models
+        example_model = args.model_download[0]
+        output_manager.console_update("")
+        output_manager.display_docker_usage(docker_bind, example_model)
+
+        return
+
+
+    output_manager.log_update('----------------------------------------------------------------------------------------------------')
+    output_manager.log_update('                                     STARTING LIONZ-v.0.10.0                                         ')
+    output_manager.log_update('----------------------------------------------------------------------------------------------------')
+
+
     # Get the main directory and model name
     parent_folder = os.path.abspath(args.main_directory)
     model_name = args.model_name
@@ -190,10 +251,6 @@ def main():
     lion_instances = args.lions_pride
 
     output_manager.configure_logging(parent_folder)
-    output_manager.log_update('----------------------------------------------------------------------------------------------------')
-    output_manager.log_update('                                     STARTING LIONZ-v.0.10.0                                         ')
-    output_manager.log_update('----------------------------------------------------------------------------------------------------')
-
     # ------------------------------
     # DOWNLOAD THE MODEL
     # ------------------------------
