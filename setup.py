@@ -13,11 +13,10 @@ emails_string = ", ".join([email for name, email in AUTHORS])
 
 setup(
     name='lionz',
-    version='0.16.1',
+    version='0.17.0',
     packages=find_packages(),
     install_requires=[
-        'acvl-utils==0.2',
-        'nnunetv2',
+        'nnunetv2>=2.6.0',
         'nibabel',
         'halo',
         'pandas',
@@ -26,8 +25,6 @@ setup(
         'argparse',
         'imageio',
         'numpy<2.0',
-        'mpire',
-        'openpyxl',
         'matplotlib',
         'pyfiglet',
         'natsort',
