@@ -40,6 +40,7 @@ import importlib.metadata
 from halo import Halo
 from datetime import datetime
 from rich.console import Console, RenderableType
+from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.progress import Progress, TextColumn, BarColumn, FileSizeColumn, TransferSpeedColumn, TimeRemainingColumn
@@ -167,6 +168,26 @@ class OutputManager:
         self.console_update(" ")
         self.console_update(" The Three LION tamers: Lalith Kumar Shiyam Sundar | Sebastian Gutschmayer | Manuel Pires")
         self.console_update(" ")
+
+
+    def display_docker_usage(self, docker_bind: str, example_model: str):
+        docker_example = f"""\
+    docker run --gpus all --ipc=host \\
+        -v /path/to/data:/app/data \\
+        -v {docker_bind}:/usr/local/models \\
+        lalithshiyam/lionz \\
+        -d /app/data -m {example_model}
+    """
+        docker_msg = Text()
+        docker_msg.append("🐳 Some useful information...\n", style="bold violet")
+        docker_msg.append("\n📂 Downloaded models are stored here:\n", style="bold")
+        docker_msg.append(f"  {docker_bind}/nnunet_trained_models\n\n", style="orange3")
+        docker_msg.append("📦 Bind this folder into the container at:\n", style="bold")
+        docker_msg.append("  /usr/local/models\n\n", style="orange3")
+        docker_msg.append("🚀 Example Docker Run:\n", style="bold")
+        docker_msg.append(docker_example, style="green")
+
+        self.console.print(Panel(docker_msg, title="🐳 INFO FOR DOCKER USERS", border_style="violet", padding=(1, 2)))
 
 
 def check_device(output_manager: OutputManager = OutputManager(False, False)) -> tuple[str, int | None]:

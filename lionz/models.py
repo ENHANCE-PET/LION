@@ -24,13 +24,14 @@ AVAILABLE_MODELS = MODEL_METADATA.keys()
 
 
 class Model:
-    def __init__(self, model_identifier: str, output_manager: system.OutputManager):
+    def __init__(self, model_identifier: str, output_manager: system.OutputManager, override_directory: str = None):
         self.model_identifier = model_identifier
         self.folder_name = MODEL_METADATA[self.model_identifier][KEY_FOLDER_NAME]
         self.url = MODEL_METADATA[self.model_identifier][KEY_URL]
         self.tumor_label = MODEL_METADATA[self.model_identifier][TUMOR_LABEL]
         self.limit_fov = False
-        self.directory = os.path.join(system.MODELS_DIRECTORY_PATH, self.folder_name)
+        base_model_dir = os.path.abspath(override_directory) if override_directory else system.MODELS_DIRECTORY_PATH
+        self.directory = os.path.join(base_model_dir, self.folder_name)
 
         self.__download(output_manager)
         self.configuration_folders = self.__get_configuration_folders(output_manager)
@@ -168,7 +169,9 @@ class Model:
                 total_size = sum(file.file_size for file in zip_ref.infolist())
                 task = progress.add_task(f"[white] Extracting {self.model_identifier}...", total=total_size)
                 for file in zip_ref.infolist():
-                    zip_ref.extract(file, system.MODELS_DIRECTORY_PATH)
+                    extract_root = os.path.dirname(self.directory)
+                    os.makedirs(extract_root, exist_ok=True)
+                    zip_ref.extract(file, extract_root)
                     progress.update(task, advance=file.file_size)
 
         output_manager.log_update(f"    - {self.model_identifier} extracted.")
@@ -227,16 +230,16 @@ class Model:
 
     @staticmethod
     def model_identifier_valid(model_identifier: str, output_manager: system.OutputManager) -> bool:
-        if model_identifier not in MODEL_METADATA:
+        if model_identifier not in AVAILABLE_MODELS:
             output_manager.console_update("No valid model selected.")
             return False
 
         model_information = MODEL_METADATA[model_identifier]
-        if KEY_URL not in model_information or KEY_FOLDER_NAME not in model_information or KEY_LIMIT_FOV not in model_information:
-            output_manager.console_update("One or more of the required keys url, folder_name, limit_fov are missing.")
+        if KEY_URL not in model_information or KEY_FOLDER_NAME not in model_information :
+            output_manager.console_update("One or more of the required keys url, folder_name are missing.")
             return False
 
-        if model_information[KEY_URL] == "" or model_information[KEY_FOLDER_NAME] == "" or (model_information[KEY_LIMIT_FOV] is not None and not isinstance(model_information[KEY_LIMIT_FOV], dict)):
+        if model_information[KEY_URL] == "" or model_information[KEY_FOLDER_NAME] == ""  != None:
             output_manager.console_update("One or more of the required keys url, folder_name, limit_fov are not defined correctly.")
             return False
 
