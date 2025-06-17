@@ -259,7 +259,7 @@ def convert_bq_to_suv(bq_image: str, out_suv_image: str, suv_parameters: dict, i
     :param suv_scale_factor: A number contained in the DICOM tag [7053,1000] for converting CNTS PET images to SUV
     """
     # Read input image
-    image = SimpleITK.ReadImage(bq_image)
+    image = SimpleITK.ReadImage(bq_image, SimpleITK.sitkFloat32)
 
     # Determine the scale factor for BQML images
     if image_unit.upper() == 'BQML':

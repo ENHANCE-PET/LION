@@ -17,7 +17,6 @@ import sys
 import torch
 import numpy as np
 from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
-from lionz.image_processing import threshold_segmentation
 from lionz import models
 from typing import Tuple, List, Dict, Iterator
 
@@ -63,7 +62,7 @@ def preprocessing_iterator_from_array(image_array: np.ndarray, image_properties:
     return iterator
 
 
-def predict_from_array_by_iterator(image_array: np.ndarray, model: models.Model, accelerator: str, nnunet_log_filename: str = None, threshold: int = None) -> np.ndarray:
+def predict_from_array_by_iterator(image_array: np.ndarray, model: models.Model, accelerator: str, nnunet_log_filename: str = None) -> np.ndarray:
     image_array = image_array[None, ...]
 
     original_stdout = sys.stdout
@@ -86,8 +85,6 @@ def predict_from_array_by_iterator(image_array: np.ndarray, model: models.Model,
         combined_segmentations = np.squeeze(segmentations)
         combined_segmentations[combined_segmentations != model.tumor_label] = 0
         combined_segmentations[combined_segmentations == model.tumor_label] = 1
-        if threshold:
-            combined_segmentations = threshold_segmentation(image_array, combined_segmentations, threshold)
 
         return combined_segmentations
 
