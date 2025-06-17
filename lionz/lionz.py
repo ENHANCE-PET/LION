@@ -452,13 +452,16 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
             output_manager.log_update(f'   - Model {model_workflow.target_model}')
             segmentation_array = predict.predict_from_array_by_iterator(resampled_array, model_workflow[0],
                                                                         accelerator,
-                                                                        output_manager.nnunet_log_filename, threshold)
+                                                                        output_manager.nnunet_log_filename)
 
             segmentation = SimpleITK.GetImageFromArray(segmentation_array)
             segmentation.SetSpacing(desired_spacing)
             segmentation.SetOrigin(image.GetOrigin())
             segmentation.SetDirection(image.GetDirection())
             resampled_segmentation = image_processing.ImageResampler.resample_segmentation(image, segmentation)
+
+            if threshold:
+                resampled_segmentation = image_processing.threshold_segmentation_sitk(image, resampled_segmentation, threshold)
 
             segmentation_image_path = os.path.join(segmentations_dir,
                                                    f"{file_name}_tumor_seg.nii.gz")

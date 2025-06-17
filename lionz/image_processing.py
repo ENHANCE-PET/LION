@@ -309,7 +309,7 @@ def save_metrics_to_csv(tumor_volume, avg_intensity, output_file):
         writer.writerow({'Tumor Volume (cm^3)': tumor_volume, 'Average PET Intensity (Bq/ml)': avg_intensity})
 
 
-def threshold_segmentation(pet_image_array: np.ndarray, segmentation_array: np.ndarray, intensity_threshold: int) -> np.ndarray:
+def threshold_segmentation_sitk(pet_image: sitk.Image, segmentation: sitk.Image, intensity_threshold: int) -> sitk.Image:
     """
     Thresholds the segmentation to only contain voxels with intensity higher than a specified value in the PET image.
 
@@ -318,7 +318,7 @@ def threshold_segmentation(pet_image_array: np.ndarray, segmentation_array: np.n
     segmentation_path (str): Predicted segmentation.
     intensity_threshold (int): The intensity threshold. Voxels with PET intensity higher than this value will be kept.
     """
-    pet_image_array = np.squeeze(pet_image_array)
-    thresholded_data = np.logical_and(segmentation_array, pet_image_array > intensity_threshold).astype(np.uint8)
-
-    return thresholded_data
+    suv_mask = sitk.BinaryThreshold(pet_image, lowerThreshold=intensity_threshold, upperThreshold=float('inf'), insideValue=1, outsideValue=0)
+    combined_mask = sitk.And(suv_mask, segmentation)
+    thresholded_segmentation = sitk.Mask(segmentation, combined_mask)
+    return thresholded_segmentation

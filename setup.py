@@ -13,7 +13,7 @@ emails_string = ", ".join([email for name, email in AUTHORS])
 
 setup(
     name='lionz',
-    version='0.17.0',
+    version='0.17.1',
     packages=find_packages(),
     install_requires=[
         'nnunetv2>=2.6.0',
