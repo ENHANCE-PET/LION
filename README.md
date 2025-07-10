@@ -9,7 +9,7 @@
 
 
 
-LION has roared onto the scene, revolutionizing the way we view lesion segmentation. Born from the same lineage as MOOSE 3.0, LION is laser-focused on tumor segmentation. Our curated models, each crafted with precision, cater to various tracers, setting the gold standard in lesion detection.
+LION has roared onto the scene, revolutionizing the way we view lesion segmentation. Born from the same lineage as lion 3.0, LION is laser-focused on tumor segmentation. Our curated models, each crafted with precision, cater to various tracers, setting the gold standard in lesion detection.
 
 ✨ **Exclusive Engineering Paradigm**: With LION, segmentation is not just a task; it's an orchestrated dance of models. Define workflows for each model, mix and match channels as some models thrive on PET/CT while others are optimized for just PET or CT. Run them in a sequence that maximizes output and efficiency. This unique trait of LION lets you tailor the process to your exact needs, making lesion segmentation an art of precision.
 
@@ -53,24 +53,88 @@ pip install lionz
 ```
 ## For Macs powered by Apple Silicon (M series chips with MPS) 🍏
 
-1. First, create a Python environment. You can name it to your liking; for example, 'lion-env'.
+> Yes, it works. But you'll need to follow these steps carefully. Grab a ☕ or 🍺 — this may take a few minutes.
+> Note: Please make sure you have the right version of `cmake`, as well as `ninja` installed.
+> Also you need `git`, `xcode command line tools` installed. Using `brew` is the safest option. 
+
+1. Create and activate a virtual environment (We recommend Python 3.10 for stability)
+
    ```bash
-   python3.10 -m venv lion-env
+    python3.10 -m venv lion-env
+    source lion-env/bin/activate
    ```
 
-2. Activate your newly created environment.
+2. Install lion and the MPS-compatible PyTorch fork
+
+   You’ll need a special PyTorch build tailored for Apple’s Metal backend (MPS), which doesn’t use CUDA.
+
    ```bash
-   source lion-env/bin/activate 
+    pip install lionz
+    pip uninstall torch  # ensures clean install; avoids conflicts with lion-installed version
+    git clone https://github.com/LalithShiyam/pytorch-mps.git
+    cd pytorch-mps
    ```
 
-3. Install LION and a special fork of PyTorch (MPS specific). You need to install the MPS specific branch for making LION work with MPS
-   ```bash
-   pip install lionz
-   pip install git+https://github.com/LalithShiyam/pytorch-mps.git
-   ```
-Now you are ready to use LION on Apple Silicon 🏎⚡️.
+4. Fix your CMake version (IMPORTANT ⚠️)
 
-Note: Please make sure you have the right version of `cmake`, as well as `ninja` installed. Also you need `git`, `xcode command line tools` installed. Using `brew` is the safest option. If you don't - the installation will complain, but you will see which version is needed. And ask `chatGPT` for help with your terminal output, every mac seems to be different and we can't give you a concrete suggestion. Sorry.
+   **Do not use CMake 4.x** — it will break the build due to compatibility issues with `protobuf`.
+
+   Check your version:
+
+   ```bash
+    cmake --version
+   ```
+
+   If it's **4.0 or higher**, downgrade to a compatible version (e.g., 3.29.2):
+
+   ```bash
+   pip uninstall cmake -y
+   pip install cmake==3.29.2
+   ```
+
+4. Build the custom PyTorch fork for MPS
+
+   This will build PyTorch without CUDA (which Apple Silicon doesn’t support anyway):
+  
+   ```bash
+   USE_CUDA=0 python setup.py develop --verbose 2>&1 | tee build.log
+   ```
+
+> ✅ This may take some time. If it completes without errors, you’re good to go.
+
+5. Patch `nnUNetTrainer.py` (one-time fix)
+
+   Due to differences in PyTorch exports, `nnUNet` may crash with:
+
+   ```
+   ImportError: cannot import name 'GradScaler' from 'torch'
+   ```
+
+To fix it:
+
+1. Open the following file inside your lion-env folder:
+
+   ```
+   ~/lion-env/lib/python3.10/site-packages/nnunetv2/training/nnUNetTrainer/nnUNetTrainer.py
+   ```
+
+2. Replace this line 43:
+
+   ```python
+   from torch import GradScaler
+   ```
+
+   with:
+
+   ```python
+   from torch.cuda.amp import GradScaler
+   ```
+✅ That’s it!
+
+Now you’re ready to use **LION on Apple Silicon** with MPS acceleration. 🏎⚡
+If anything crashes, blame the silicon gods… or just open an issue. We're here to help.
+
+
 
 **For Windows** 🪟
 1. Set up a Python environment, say 'lion-env'.
