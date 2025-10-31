@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lionz"
+version = "0.19.0"
+description = "A toolkit for precise segmentation of tumors in PET/CT scans."
+readme = "README.md"
+license = "GPL-3.0-only"
+authors = [
+    { name = "Lalith Kumar Shiyam Sundar", email = "lalith.shiyamsundar@meduniwien.ac.at" },
+    { name = "Sebastian Gutschmayer", email = "sebastian.gutschmayer@meduniwien.ac.at" },
+    { name = "Manuel Pires", email = "manuel.pires@meduniwien.ac.at" }
+]
+keywords = [
+    "lesion segmentation",
+    "tumors",
+    "PET/CT",
+    "medical imaging"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "nnunetv2>=2.6.0",
+    "nibabel",
+    "halo",
+    "pandas",
+    "SimpleITK",
+    "pydicom~=2.2.2",
+    "imageio",
+    "numpy<2.0",
+    "matplotlib",
+    "pyfiglet",
+    "cfonts",
+    "rich-click",
+    "natsort",
+    "pillow",
+    "colorama",
+    "dask",
+    "rich",
+    "dicom2nifti~=2.4.8",
+    "emoji",
+    "dask[distributed]",
+    "opencv-python"
+]
+requires-python = ">=3.10"
+license-files = ["LICENSE"]
+
+[project.scripts]
+lionz = "lionz.lionz:main"
+
+[project.urls]
+Homepage = "https://github.com/QIMP-Team/lionz"
+"Bug Tracker" = "https://github.com/QIMP-Team/lionz/issues"
+Documentation = "https://lionz.readthedocs.io/en/latest/"
+Source = "https://github.com/QIMP-Team/lionz"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lionz*"]

@@ -63,16 +63,24 @@ os.environ["nnUNet_raw"] = ""
 os.environ["nnUNet_preprocessed"] = ""
 os.environ["nnUNet_results"] = ""
 
-import argparse
 import logging
 import time
 from datetime import datetime
 
 import colorama
 import emoji
+import rich_click as click
+import rich_click
 import SimpleITK
 import multiprocessing as mp
 import concurrent.futures
+from rich.text import Text
+
+rich_click.USE_MARKDOWN = False
+rich_click.SHOW_ARGUMENTS = True
+rich_click.SHOW_OPTION_DEFAULTS = True
+rich_click.MAX_WIDTH = 100
+rich_click.SHOW_METAVARS_COLUMN = False
 
 from lionz import constants
 from lionz import file_utilities
@@ -82,166 +90,154 @@ from lionz import image_processing
 from lionz import system
 from lionz import models
 from lionz import predict
-from lionz.models import AVAILABLE_MODELS
+from lionz.models import (
+    AVAILABLE_MODELS,
+    MODEL_METADATA,
+    KEY_IMAGING_TYPE,
+    KEY_MODALITY,
+    KEY_REQUIRED_MODALITIES,
+    KEY_REQUIRED_PREFIXES,
+    KEY_NR_TRAINING,
+)
 
 
 from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2
 
 
-# Main function for the module
-def main():
-    logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s', level=logging.INFO,
-                        filename=datetime.now().strftime('lionz-v.0.10.0.%H-%M-%d-%m-%Y.log'), filemode='w')
+def execute_cli(
+    main_directory: str,
+    model_name: str,
+    threshold: float | None,
+    verbose_console: bool,
+    verbose_log: bool,
+    generate_mip: bool,
+    lions_pride: int | None,
+) -> None:
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
+        level=logging.INFO,
+        filename=datetime.now().strftime(f"lionz-v.{constants.VERSION}.%H-%M-%d-%m-%Y.log"),
+        filemode="w",
+    )
     colorama.init()
-
-    # Argument parser
-    parser = argparse.ArgumentParser(
-        description=constants.USAGE_MESSAGE,
-        formatter_class=argparse.RawTextHelpFormatter,  # To retain the custom formatting
-        add_help=False  # We'll add our own help option later
-    )
-
-    # Main directory containing subject folders
-    parser.add_argument(
-        "-d", "--main_directory",
-        type=str,
-        required=True,
-        metavar="<MAIN_DIRECTORY>",
-        help="Specify the main directory containing subject folders."
-    )
-
-    # Name of the model to use for segmentation
-    model_help_text = "Choose the model for segmentation from the following:\n" + "\n".join(AVAILABLE_MODELS)
-    parser.add_argument(
-        "-m", "--model_name",
-        type=str,
-        choices=AVAILABLE_MODELS,
-        required=True,
-        metavar="<MODEL_NAME>",
-        help=model_help_text
-    )
-
-    # Whether the obtained segmentations should be thresholded
-    parser.add_argument(
-        "-t", "--threshold",
-        required=False,
-        type=float,
-        default=False,
-        help="Use to define a threshold value and apply to the tumor segmentations"
-    )
-
-    parser.add_argument(
-        "-v-off", "--verbose_off",
-        action="store_false",
-        help="Deactivate verbose console."
-    )
-
-    parser.add_argument(
-        "-log-off", "--logging_off",
-        action="store_false",
-        help="Deactivate logging."
-    )
-
-    parser.add_argument(
-        "-gen-mip", "--generate_mip",
-        required=False,
-        default=False,
-        action="store_true",
-        help="Use to skip mip creation"
-    )
-
-    parser.add_argument(
-        '-pride', '--lions_pride',
-        nargs='?',
-        const=2,
-        type=int,
-        help='Specify the concurrent jobs (default: 2)'
-    )
-
-    # Custom help option
-    parser.add_argument(
-        "-h", "--help",
-        action="help",
-        default=argparse.SUPPRESS,
-        help="Show this help message and exit."
-    )
-
-    # Parse the arguments
-    args = parser.parse_args()
-
-    verbose_console = args.verbose_off
-    verbose_log = args.logging_off
 
     output_manager = system.OutputManager(verbose_console, verbose_log)
     output_manager.display_logo()
-    output_manager.display_authors()
+    print('')
     output_manager.display_citation()
 
-    # Get the main directory and model name
-    parent_folder = os.path.abspath(args.main_directory)
-    model_name = args.model_name
+    parent_folder = os.path.abspath(main_directory)
+    selected_model = model_name
+    accelerator, device_count = system.check_device(output_manager, announce=False)
 
-    # Check for thresholding
-    threshold = args.threshold
-
-    # Check for mip generation
-    generate_mip = args.generate_mip
-
-    lion_instances = args.lions_pride
+    effective_threshold = threshold
+    generate_mip_output = generate_mip
+    lion_instances = lions_pride
 
     output_manager.configure_logging(parent_folder)
-    output_manager.log_update('----------------------------------------------------------------------------------------------------')
-    output_manager.log_update('                                     STARTING LIONZ-v.0.10.0                                         ')
-    output_manager.log_update('----------------------------------------------------------------------------------------------------')
+    output_manager.log_update("----------------------------------------------------------------------------------------------------")
+    output_manager.log_update(
+        f"                                     STARTING LIONZ-v.{constants.VERSION}                                         "
+    )
+    output_manager.log_update("----------------------------------------------------------------------------------------------------")
+
+    # ----------------------------------
+    # INPUT VALIDATION AND PREPARATION
+    # ----------------------------------
+    output_manager.log_update(' ')
+    output_manager.log_update('- Main directory: ' + parent_folder)
+    output_manager.log_update('- Model name: ' + selected_model)
+    output_manager.log_update(' ')
+
+    model_identifiers = selected_model if isinstance(selected_model, list) else [selected_model]
+    note_text = Text(justify="left")
+    for index, model_identifier in enumerate(model_identifiers):
+        metadata = MODEL_METADATA.get(model_identifier, {})
+        imaging_type = metadata.get(KEY_IMAGING_TYPE, "clin").title()
+        modality_label = metadata.get(KEY_MODALITY, "PT")
+        required_modalities = metadata.get(KEY_REQUIRED_MODALITIES) or [modality_label]
+        required_prefixes = metadata.get(KEY_REQUIRED_PREFIXES) or [modality_label.replace('-', '_') + "_"]
+        training_count = metadata.get(KEY_NR_TRAINING, "Not available")
+
+        if index:
+            note_text.append("\n", style=constants.CLI_COLORS["muted"])
+
+        note_text.append("Model Name: ", style=constants.CLI_COLORS["accent"])
+        note_text.append(f"{model_identifier}\n", style=constants.CLI_COLORS["text"])
+        note_text.append("Imaging Type: ", style=constants.CLI_COLORS["accent"])
+        note_text.append(f"{imaging_type}\n", style=constants.CLI_COLORS["text"])
+        note_text.append("Required Modality: ", style=constants.CLI_COLORS["accent"])
+        note_text.append(f"{', '.join(required_modalities)}\n", style=constants.CLI_COLORS["text"])
+        note_text.append("Required Prefix (non-DICOM images): ", style=constants.CLI_COLORS["accent"])
+        note_text.append(f"{', '.join(required_prefixes)}\n", style=constants.CLI_COLORS["text"])
+        note_text.append("Training Datasets: ", style=constants.CLI_COLORS["accent"])
+        note_text.append(f"{training_count}", style=constants.CLI_COLORS["text"])
+
+    note_text.append("\n\n", style=constants.CLI_COLORS["muted"])
+    note_text.append(
+        emoji.emojize("⚠️  Subjects that don't have the required modalities (check file prefix) will be skipped."),
+        style=constants.CLI_COLORS["warning"],
+    )
+    note_text.append("\n", style=constants.CLI_COLORS["muted"])
+
+    if accelerator == "mps":
+        device_line = "🍎 Apple MPS backend is available. Predictions will be run on Apple Silicon GPU."
+    elif accelerator == "cuda":
+        if device_count:
+            device_line = emoji.emojize(
+                f":high_voltage: CUDA is available with {device_count} GPU(s). Predictions will be run on GPU."
+            )
+        else:
+            device_line = emoji.emojize(
+                ":high_voltage: CUDA is available. Predictions will be run on GPU."
+            )
+    else:
+        device_line = emoji.emojize(
+            ":gear: CUDA/MPS not available. Predictions will be run on CPU."
+        )
+
+    note_text.append(device_line, style=constants.CLI_COLORS["warning"])
+
+    output_manager.context_panel("Note", note_text, icon=":memo:")
 
     # ------------------------------
     # DOWNLOAD THE MODEL
     # ------------------------------
 
-    output_manager.console_update('')
-    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":globe_with_meridians:")} MODEL DOWNLOAD:{constants.ANSI_RESET}')
-    output_manager.console_update('')
+    output_manager.section("Model Download", ":globe_with_meridians:")
     model_path = system.MODELS_DIRECTORY_PATH
     file_utilities.create_directory(model_path)
-    model_routine = models.construct_model_routine(model_name, output_manager)
-
-    # ----------------------------------
-    # INPUT VALIDATION AND PREPARATION
-    # ----------------------------------
-
-    output_manager.log_update(' ')
-    output_manager.log_update('- Main directory: ' + parent_folder)
-    output_manager.log_update('- Model name: ' + model_name)
-    output_manager.log_update(' ')
-    output_manager.console_update(' ')
-    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":memo:")} NOTE:{constants.ANSI_RESET}')
-    output_manager.console_update(' ')
+    model_routine = models.construct_model_routine(selected_model, output_manager)
+    model_count = sum(len(workflows) for workflows in model_routine.values())
+    model_count_for_stats = model_count or 1
 
     custom_trainer_status = add_custom_trainers_to_local_nnunetv2()
     modalities = input_validation.determine_model_expectations(model_routine, output_manager)
     output_manager.log_update('- Custom trainer: ' + custom_trainer_status)
-    accelerator, device_count = system.check_device()
-    inputs_valid = input_validation.validate_inputs(parent_folder, model_name)
+    inputs_valid = input_validation.validate_inputs(parent_folder, selected_model)
     if not inputs_valid:
-        exit(1)
+        raise click.ClickException("Input validation failed.")
     else:
         output_manager.log_update(f"Input validation successful.")
 
     if lion_instances is not None:
-        output_manager.console_update(f" Number of lion instances run in parallel: {lion_instances}")
+        output_manager.message(
+            f"Number of LION instances run in parallel: {lion_instances}",
+            style="accent",
+            icon=":lion_face:",
+        )
 
 
     # ------------------------------
     # INPUT STANDARDIZATION
     # ------------------------------
-    output_manager.console_update('')
-    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":magnifying_glass_tilted_left:")} STANDARDIZING INPUT DATA TO NIFTI:{constants.ANSI_RESET}')
-    output_manager.console_update('')
+    output_manager.console.print()
+    output_manager.section("Standardizing input data to NIfTI", ":magnifying_glass_tilted_left:")
     output_manager.log_update(' ')
     output_manager.log_update(' STANDARDIZING INPUT DATA TO NIFTI:')
     output_manager.log_update(' ')
     image_conversion.standardize_to_nifti(parent_folder, output_manager)
-    output_manager.console_update(f"{constants.ANSI_GREEN} Standardization complete.{constants.ANSI_RESET}")
+    output_manager.message(" Standardization complete.", style="success")
     output_manager.log_update(" Standardization complete.")
 
     # ------------------------------
@@ -254,16 +250,23 @@ def main():
 
     num_subjects = len(lion_compliant_subjects)
     if num_subjects < 1:
-        print(f'{constants.ANSI_RED} {emoji.emojize(":cross_mark:")} No lion compliant subject found to continue!{constants.ANSI_RESET} {emoji.emojize(":light_bulb:")} See: https://github.com/LalithShiyam/LION#directory-conventions-for-lion-%EF%B8%8F')
+        output_manager.message(
+            "No LION compliant subject found to continue!",
+            style="error",
+            icon=":cross_mark:",
+            emphasis=True,
+        )
+        output_manager.message(
+            "See: https://github.com/LalithShiyam/LION#directory-conventions-for-lion-%EF%B8%8F",
+            style="info",
+            icon=":light_bulb:",
+        )
         return
 
     # -------------------------------------------------
     # RUN PREDICTION ONLY FOR LION COMPLIANT SUBJECTS
     # -------------------------------------------------
-
-    output_manager.console_update('')
-    output_manager.console_update(f'{constants.ANSI_VIOLET} {emoji.emojize(":crystal_ball:")} PREDICT:{constants.ANSI_RESET}')
-    output_manager.console_update('')
+    output_manager.section("Prediction", ":crystal_ball:")
     output_manager.log_update(' ')
     output_manager.log_update(' PERFORMING PREDICTION:')
     output_manager.log_update(' ')
@@ -278,15 +281,28 @@ def main():
         processed_subjects = 0
         output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
 
+        compliant_count = len(lion_compliant_subjects)
         if device_count is not None and device_count > 1:
-            accelerator_assignments = [f"{accelerator}:{i % device_count}" for i in range(len(subjects))]
+            accelerator_assignments = [f"{accelerator}:{i % device_count}" for i in range(compliant_count)]
         else:
-            accelerator_assignments = [accelerator] * len(subjects)
+            accelerator_assignments = [accelerator] * compliant_count
 
         with concurrent.futures.ProcessPoolExecutor(max_workers=lion_instances, mp_context=mp_context) as executor:
             futures = []
             for i, (subject, accelerator) in enumerate(zip(lion_compliant_subjects, accelerator_assignments)):
-                futures.append(executor.submit(lion_subject, subject, i, num_subjects, model_routine, accelerator, None, threshold, generate_mip))
+                futures.append(
+                    executor.submit(
+                        lion_subject,
+                        subject,
+                        i,
+                        num_subjects,
+                        model_routine,
+                        accelerator,
+                        None,
+                        effective_threshold,
+                        generate_mip_output,
+                    )
+                )
 
             for _ in concurrent.futures.as_completed(futures):
                 processed_subjects += 1
@@ -294,31 +310,136 @@ def main():
 
     else:
         for i, subject in enumerate(lion_compliant_subjects):
-            lion_subject(subject, i, num_subjects, model_routine, accelerator, output_manager, threshold, generate_mip)
+            lion_subject(
+                subject,
+                i,
+                num_subjects,
+                model_routine,
+                accelerator,
+                output_manager,
+                effective_threshold,
+                generate_mip_output,
+            )
 
     end_total_time = time.time()
     total_elapsed_time = (end_total_time - start_total_time) / 60
     time_per_dataset = total_elapsed_time / len(lion_compliant_subjects)
-    time_per_model = time_per_dataset / len(model_name)
+    time_per_model = time_per_dataset / model_count_for_stats
 
-    output_manager.spinner_succeed(f'{constants.ANSI_GREEN} All predictions done! | Total elapsed time for '
-                                   f'{len(lion_compliant_subjects)} datasets: {round(total_elapsed_time, 1)} min'
-                                   f' | Time per dataset: {round(time_per_dataset, 2)} min')
+    completion_message = (
+        f"All predictions done. Total time: {round(total_elapsed_time, 1)} min "
+        f"(per dataset: {round(time_per_dataset, 2)} min)."
+    )
+    output_manager.spinner_succeed(completion_message)
     output_manager.log_update(f' ')
     output_manager.log_update(f' ALL SUBJECTS PROCESSED')
     output_manager.log_update(f'  - Number of Subjects: {len(lion_compliant_subjects)}')
-    output_manager.log_update(f'  - Number of Models:   {len(model_name)}')
+    output_manager.log_update(f'  - Number of Models:   {model_count}')
     output_manager.log_update(f'  - Time (total):       {round(total_elapsed_time, 1)}min')
     output_manager.log_update(f'  - Time (per subject): {round(time_per_dataset, 2)}min')
     output_manager.log_update(f'  - Time (per model):   {round(time_per_model, 2)}min')
 
     output_manager.log_update('----------------------------------------------------------------------------------------------------')
-    output_manager.log_update('                                     FINISHED LION-Z V.0.10.0                                       ')
+    output_manager.log_update(f'                                     FINISHED LION-Z V.{constants.VERSION}                                       ')
     output_manager.log_update('----------------------------------------------------------------------------------------------------')
 
 
+@click.command(
+    context_settings={"help_option_names": ["-h", "--help"]},
+    help=constants.USAGE_MESSAGE.strip(),
+)
+@click.option(
+    "-d",
+    "--main-directory",
+    "main_directory",
+    type=click.Path(path_type=str),
+    required=True,
+    metavar="<MAIN_DIRECTORY>",
+    help="Specify the main directory containing subject folders.",
+)
+@click.option(
+    "-m",
+    "--model-name",
+    "model_name",
+    type=click.Choice(sorted(AVAILABLE_MODELS), case_sensitive=False),
+    required=True,
+    metavar="<MODEL_NAME>",
+    help="Select the model to run.",
+)
+@click.option(
+    "-t",
+    "--threshold",
+    type=float,
+    default=None,
+    show_default=False,
+    help="Threshold value applied to the tumor segmentations.",
+)
+@click.option(
+    "-v-off",
+    "--verbose-off",
+    "verbose_off",
+    is_flag=True,
+    default=False,
+    help="Deactivate verbose console output.",
+)
+@click.option(
+    "-log-off",
+    "--logging-off",
+    "logging_off",
+    is_flag=True,
+    default=False,
+    help="Deactivate logging.",
+)
+@click.option(
+    "-g",
+    "--generate-mip",
+    "generate_mip",
+    is_flag=True,
+    default=False,
+    help="Generate rotational MIP previews alongside segmentations.",
+)
+@click.option(
+    "-p",
+    "--lions-pride",
+    "lions_pride",
+    type=int,
+    default=None,
+    metavar="<JOBS>",
+    help="Number of concurrent jobs (set to 2 or more to enable parallel execution).",
+)
+def main(
+    main_directory: str,
+    model_name: str,
+    threshold: float | None,
+    verbose_off: bool,
+    logging_off: bool,
+    generate_mip: bool,
+    lions_pride: int | None,
+) -> None:
+    """
+    LIONZ (Lesion segmentatION) — precise tumor segmentation for PET/CT datasets.
+    """
+    normalized_model = model_name.lower()
+    verbose_console = not verbose_off
+    verbose_log = not logging_off
+    try:
+        execute_cli(
+            main_directory=main_directory,
+            model_name=normalized_model,
+            threshold=threshold,
+            verbose_console=verbose_console,
+            verbose_log=verbose_log,
+            generate_mip=generate_mip,
+            lions_pride=lions_pride,
+        )
+    except click.ClickException:
+        raise
+    except Exception as exc:  # pragma: no cover - defensive
+        raise click.ClickException(str(exc)) from exc
+
+
 def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
-         model_name: str, output_dir: str = None, accelerator: str = None, threshold: int = False) -> str | numpy.ndarray | SimpleITK.Image:
+         model_name: str, output_dir: str = None, accelerator: str = None, threshold: float | None = None) -> str | numpy.ndarray | SimpleITK.Image:
     """
     Execute the LION tumour segmentation process.
 
@@ -335,6 +456,9 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
 
     :param accelerator: Specifies the accelerator type, e.g., "cpu" or "cuda".
     :type accelerator: Optional[str]
+
+    :param threshold: Optional threshold value applied to the resulting segmentations.
+    :type threshold: Optional[float]
 
     :return: The output type aligns with the input type:
              - str (file path): If `input_data` is a file path.
@@ -401,7 +525,7 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
 
 
 def lion_subject(subject: str, subject_index: int, number_of_subjects: int, model_routine: dict, accelerator: str,
-                  output_manager: system.OutputManager | None, threshold: int = None, generate_mip: bool = False):
+                  output_manager: system.OutputManager | None, threshold: float | None = None, generate_mip: bool = False):
     # SETTING UP DIRECTORY STRUCTURE
     subject_name = os.path.basename(subject)
 
@@ -460,7 +584,7 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
             segmentation.SetDirection(image.GetDirection())
             resampled_segmentation = image_processing.ImageResampler.resample_segmentation(image, segmentation)
 
-            if threshold:
+            if threshold is not None:
                 resampled_segmentation = image_processing.threshold_segmentation_sitk(image, resampled_segmentation, threshold)
 
             segmentation_image_path = os.path.join(segmentations_dir,
@@ -485,9 +609,10 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
                                                            rotation_step=constants.MIP_ROTATION_STEP,
                                                            output_spacing=constants.MIP_VOXEL_SPACING)
 
-                output_manager.spinner_update(f'{constants.ANSI_GREEN} [{subject_index + 1}/{number_of_subjects}] Fused MIP of PET image and tumor mask '
-                               f'calculated'
-                               f' for {os.path.basename(subject)}! ')
+                output_manager.spinner_update(
+                    f"[{subject_index + 1}/{number_of_subjects}] Fused MIP of PET image and tumor mask calculated "
+                    f"for {os.path.basename(subject)}!"
+                )
                 time.sleep(3)
 
             # ----------------------------------
@@ -509,8 +634,9 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
     end_time = time.time()
     elapsed_time = end_time - start_time
     output_manager.spinner_update(
-        f' {constants.ANSI_GREEN}[{subject_index + 1}/{number_of_subjects}] Prediction done for {subject_name} using {len(model_names)} model: '
-        f' | Elapsed time: {round(elapsed_time / 60, 1)} min{constants.ANSI_RESET}')
+        f"[{subject_index + 1}/{number_of_subjects}] Prediction done for {subject_name} using {len(model_names)} model(s)"
+        f" | Elapsed time: {round(elapsed_time / 60, 1)} min"
+    )
     time.sleep(1)
     output_manager.log_update(
         f' Prediction done for {subject_name} using {len(model_names)} model: {", ".join(model_names)}!'

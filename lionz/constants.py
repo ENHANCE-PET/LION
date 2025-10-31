@@ -13,6 +13,63 @@ This module contains the constants that are used in the LIONZ project.
 
 import os
 import sys
+from importlib import metadata
+from pathlib import Path
+
+
+def _load_version_from_pyproject() -> str | None:
+    """Best-effort extraction of the project version from pyproject.toml."""
+
+    pyproject_path = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    if not pyproject_path.is_file():
+        return None
+
+    try:
+        import tomllib  # Python 3.11+
+    except ModuleNotFoundError:
+        tomllib = None
+
+    if tomllib is not None:  # pragma: no cover - depends on runtime
+        try:
+            with pyproject_path.open("rb") as pyproject_file:
+                data = tomllib.load(pyproject_file)
+            return data.get("project", {}).get("version")
+        except (OSError, ValueError, AttributeError):
+            return None
+
+    try:  # pragma: no cover - optional dependency
+        import tomli
+    except ModuleNotFoundError:  # pragma: no cover - best-effort fallback
+        tomli = None
+
+    if tomli is not None:
+        try:
+            with pyproject_path.open("rb") as pyproject_file:
+                data = tomli.load(pyproject_file)
+            return data.get("project", {}).get("version")
+        except (OSError, ValueError, AttributeError):
+            return None
+
+    try:
+        for line in pyproject_path.read_text(encoding="utf-8").splitlines():
+            cleaned = line.strip()
+            if cleaned.startswith("version"):
+                _, value = cleaned.split("=", 1)
+                return value.strip().strip('"').strip("'")
+    except OSError:
+        return None
+
+    return None
+
+
+def _resolve_package_version() -> str:
+    fallback = _load_version_from_pyproject()
+    if fallback:
+        return fallback
+    try:
+        return metadata.version("lionz")
+    except metadata.PackageNotFoundError:  # pragma: no cover - development tree
+        return "0.0.0"
 
 
 def get_virtual_env_root() -> str:
@@ -30,7 +87,7 @@ def get_virtual_env_root() -> str:
 # Get the root directory of the virtual environment
 project_root = get_virtual_env_root()
 BINARY_PATH = os.path.join(project_root, 'bin')
-VERSION = '0.10'
+VERSION = _resolve_package_version()
 
 # Define the paths to the trained models and the LIONZ model
 NNUNET_RESULTS_FOLDER = os.path.join(project_root, 'models', 'nnunet_trained_models')
@@ -43,12 +100,34 @@ ALLOWED_MODALITIES = ['CT', 'PT']
 # Define the name of the temporary folder
 TEMP_FOLDER = 'temp'
 
-# Define color codes for console output
-ANSI_ORANGE = '\033[38;5;208m'
-ANSI_GREEN = '\033[38;5;40m'
-ANSI_VIOLET = '\033[38;5;141m'
-ANSI_RED = '\033[38;5;196m'
-ANSI_RESET = '\033[0m'
+# CLI colour palette derived from the shared QIMP CLI style.
+CLI_COLORS = {
+    "primary": "#ff79c6",
+    "secondary": "#4163ca",
+    "success": "#34c658",
+    "warning": "#f0c37b",
+    "error": "#eb7777",
+    "info": "#2b60dc",
+    "accent": "#bd93f9",
+    "muted": "#44475a",
+    "text": "#44475a",
+    "border": "#d795be",
+}
+
+BANNER_COLORS = [
+    CLI_COLORS["secondary"],
+    CLI_COLORS["primary"],
+]
+
+BANNER_FONT = "block"
+TAGLINE = "The New Standard in PET Lesion Segmentation."
+COMMUNITY_STATEMENT = "A part of the ENHANCE.PET initiative. Join us at www.enhance.pet to build the future of PET imaging together."
+MISSION_STATEMENT = ""
+
+ACCENT_LINE_GLYPH = "─"
+ACCENT_LINE_MIN_WIDTH = 12
+ACCENT_LINE_MAX_WIDTH = 48
+CONTEXT_PANEL_PADDING = (1, 2)
 
 # Define folder names
 SEGMENTATIONS_FOLDER = 'segmentations'
@@ -71,8 +150,8 @@ FRAME_DURATION = 0.4
 
 # Training dataset number 
 
-TRAINING_DATASET_SIZE_FDG = '1022' 
-TRAINING_DATASET_SIZE_PSMA = '812'
+TRAINING_DATASET_SIZE_FDG = '5341' 
+TRAINING_DATASET_SIZE_PSMA = '1005'
 
 # MODELS
 KEY_FOLDER_NAME = "folder_name"
@@ -89,12 +168,8 @@ TUMOR_LABEL = 0
 
 
 USAGE_MESSAGE = """
-    Usage:
-      lionz -d <MAIN_DIRECTORY> -m <MODEL_NAME>
-    Example:  
-      lionz -d /Documents/Data_to_lionz/ -m clin_ct_lesions
+LIONZ (Lesion segmentatION) focuses on precise tumor segmentation in PET/CT datasets.
 
-    Description:
-      LIONZ (Lesion segmentatION) - A state-of-the-art AI solution that
-      emphasizes precise lesion segmentation in diverse imaging datasets.
-    """
+Example:
+  lionz -d /Documents/Data_to_lionz/ -m fdg
+"""

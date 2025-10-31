@@ -51,6 +51,18 @@ source lion-env/bin/activate  # for MacOS
 ```bash
 pip install lionz
 ```
+
+**From source using uv** 🧑‍💻
+
+If you are working from a clone of this repository, the project is now managed with [uv](https://github.com/astral-sh/uv).
+
+```bash
+# inside the cloned repository
+uv sync
+uv run lionz -h
+```
+
+The `uv sync` command creates a virtual environment, resolves dependencies using `pyproject.toml`, and produces a `uv.lock` so builds stay reproducible.
 ## For Macs powered by Apple Silicon (M series chips with MPS) 🍏
 
 > Yes, it works. But you'll need to follow these steps carefully. Grab a ☕ or 🍺 — this may take a few minutes.

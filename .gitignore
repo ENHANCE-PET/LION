@@ -1,0 +1,71 @@
+# General OS junk
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Python bytecode and cache directories
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+
+# Package build artefacts
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# uv / pip cache
+.uv-cache/
+.pip-cache/
+
+# Coverage / testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# IDE / editor state
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs & reports
+*.log
+logs/
+
+# Data / temporary output
+*.tmp
+*.bak
+*.old
+*.orig
+
+# macOS staging folders
+.TemporaryItems/
+.Trashes
+
+# Docker
+.docker/
+*.pid
+
+# Project-specific artefacts
+nnunet_trained_models/
+models/
+lionz-fdg-*/
+lionz-psma-*/
+
+# logs
+*.log

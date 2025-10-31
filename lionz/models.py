@@ -4,19 +4,45 @@ import zipfile
 import requests
 import shutil 
 from lionz import system
-from lionz.constants import (KEY_FOLDER_NAME, KEY_URL, KEY_LIMIT_FOV, DEFAULT_SPACING, ANSI_GREEN, ANSI_RESET,
-                             FILE_NAME_DATASET_JSON, FILE_NAME_PLANS_JSON, TUMOR_LABEL)
+from lionz.constants import (
+    KEY_FOLDER_NAME,
+    KEY_URL,
+    KEY_LIMIT_FOV,
+    DEFAULT_SPACING,
+    FILE_NAME_DATASET_JSON,
+    FILE_NAME_PLANS_JSON,
+    TUMOR_LABEL,
+    TRAINING_DATASET_SIZE_FDG,
+    TRAINING_DATASET_SIZE_PSMA,
+)
+
+
+KEY_IMAGING_TYPE = "imaging_type"
+KEY_MODALITY = "modality"
+KEY_REQUIRED_MODALITIES = "required_modalities"
+KEY_REQUIRED_PREFIXES = "required_prefixes"
+KEY_NR_TRAINING = "nr_training_data"
 
 MODEL_METADATA = {
     "psma": {
         KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_psma_1005_11032025.zip",
         KEY_FOLDER_NAME: "Dataset711_PSMA",
-        TUMOR_LABEL: 6
+        TUMOR_LABEL: 6,
+        KEY_IMAGING_TYPE: "clinical",
+        KEY_MODALITY: "PT",
+        KEY_REQUIRED_MODALITIES: ["PT"],
+        KEY_REQUIRED_PREFIXES: ["PT_"],
+        KEY_NR_TRAINING: TRAINING_DATASET_SIZE_PSMA,
     },
     "fdg": {
         KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_fdg_5341_106062025.zip",
         KEY_FOLDER_NAME: "Dataset789_Tumors",
-        TUMOR_LABEL: 11
+        TUMOR_LABEL: 11,
+        KEY_IMAGING_TYPE: "clinical",
+        KEY_MODALITY: "PT",
+        KEY_REQUIRED_MODALITIES: ["PT"],
+        KEY_REQUIRED_PREFIXES: ["PT_"],
+        KEY_NR_TRAINING: TRAINING_DATASET_SIZE_FDG,
     },
 }
 
@@ -59,7 +85,11 @@ class Model:
         folders = [item for item in items if not item.startswith(".") and item.count("__") == 2 and os.path.isdir(os.path.join(self.directory, item))]
 
         if len(folders) > 1:
-            output_manager.console_update("Information: more than one configuration folder found. Utilizing information of the first one encountered.")
+            output_manager.message(
+                "More than one configuration folder found. Using the first one encountered.",
+                style="info",
+                icon=":information:",
+            )
 
         if not folders:
             raise ValueError(f"No valid configuration folders found in {self.directory}")
@@ -72,11 +102,10 @@ class Model:
         return trainer, planner, resolution_configuration
 
     def __get_model_identifier_segments(self) -> tuple[str, str]:
-
-        imaging_type = "clin"
-        modality = f'pt'.upper()
-
-        return imaging_type, modality
+        metadata = MODEL_METADATA.get(self.model_identifier, {})
+        imaging_type = metadata.get(KEY_IMAGING_TYPE, "clin")
+        modality = metadata.get(KEY_MODALITY, "PT")
+        return imaging_type, modality.upper()
 
     def __get_model_data(self) -> tuple[dict, dict]:
         dataset_json_path = os.path.join(self.configuration_directory, FILE_NAME_DATASET_JSON)
@@ -114,9 +143,10 @@ class Model:
 
             # If the existing folder's URL doesn't match the new URL, remove folder
             if old_url != self.url:
-                output_manager.console_update(
-                    f" Model version mismatch detected for '{self.model_identifier}'. Removing outdated model and downloading the latest model..."
-
+                output_manager.message(
+                    f" Model version mismatch detected for '{self.model_identifier}'. Removing outdated files before downloading the latest model...",
+                    style="warning",
+                    icon=":warning:",
                 )
                 shutil.rmtree(self.directory, ignore_errors=True)
             else:
@@ -124,8 +154,9 @@ class Model:
                 output_manager.log_update(
                     f"    - A local instance of {self.model_identifier} has been detected."
                 )
-                output_manager.console_update(
-                    f"{ANSI_GREEN} A local instance of {self.model_identifier} has been detected. {ANSI_RESET}"
+                output_manager.message(
+                    f" A local instance of {self.model_identifier} has been detected.",
+                    style="success",
                 )
                 return
 
@@ -181,8 +212,10 @@ class Model:
             json.dump({"url": self.url}, vf)
 
         output_manager.log_update(f"    - {self.model_identifier} - setup complete.")
-        output_manager.console_update(
-            f"{ANSI_GREEN} {self.model_identifier} - setup complete. {ANSI_RESET}"
+        output_manager.message(
+            f"{self.model_identifier} - setup complete.",
+            style="success",
+            icon=":check_mark_button:",
         )
         
     def __get_organ_indices(self) -> dict[int, str]:
@@ -228,16 +261,24 @@ class Model:
     @staticmethod
     def model_identifier_valid(model_identifier: str, output_manager: system.OutputManager) -> bool:
         if model_identifier not in MODEL_METADATA:
-            output_manager.console_update("No valid model selected.")
+            output_manager.message("No valid model selected.", style="error", icon=":cross_mark:", emphasis=True)
             return False
 
         model_information = MODEL_METADATA[model_identifier]
         if KEY_URL not in model_information or KEY_FOLDER_NAME not in model_information or KEY_LIMIT_FOV not in model_information:
-            output_manager.console_update("One or more of the required keys url, folder_name, limit_fov are missing.")
+            output_manager.message(
+                "One or more of the required keys url, folder_name, limit_fov are missing.",
+                style="error",
+                icon=":cross_mark:",
+            )
             return False
 
         if model_information[KEY_URL] == "" or model_information[KEY_FOLDER_NAME] == "" or (model_information[KEY_LIMIT_FOV] is not None and not isinstance(model_information[KEY_LIMIT_FOV], dict)):
-            output_manager.console_update("One or more of the required keys url, folder_name, limit_fov are not defined correctly.")
+            output_manager.message(
+                "One or more of the required keys url, folder_name, limit_fov are not defined correctly.",
+                style="error",
+                icon=":cross_mark:",
+            )
             return False
 
         return True

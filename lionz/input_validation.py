@@ -16,10 +16,14 @@ import os
 from typing import List
 
 import emoji
+from rich.console import Console
+from rich.text import Text
 
 from lionz import constants
 from lionz import system
 from lionz import models
+
+ERROR_CONSOLE = Console()
 
 
 def determine_model_expectations(model_routine: dict[tuple, list[models.ModelWorkflow]], output_manager: system.OutputManager) -> list:
@@ -39,34 +43,17 @@ def determine_model_expectations(model_routine: dict[tuple, list[models.ModelWor
     required_modalities = []
     required_prefixes = []
 
-    header = ["Nr", "Model Name", "Imaging", "Required Modality", "Required Prefix (non-DICOM)",
-              "Nr of training datasets"]
-    styles = [None, "cyan", None, None, None, None]
-    table = output_manager.create_table(header, styles)
-
-    model_nr = 0
     for model_workflows in model_routine.values():
         for model_workflow in model_workflows:
-            model_nr += 1
             modalities, prefixes = model_workflow.target_model.get_expectation()
             required_modalities = required_modalities + modalities
             required_prefixes = required_prefixes + prefixes
-
-            model_identifier = model_workflow.target_model.model_identifier
-            modality = model_workflow.target_model.modality
-            imaging = f"{model_workflow.target_model.imaging_type}ical".capitalize()
-            nr_training_data = model_workflow.target_model.nr_training_data
-            table.add_row(str(model_nr), model_identifier, imaging, modality, ', '.join(prefixes), nr_training_data)
-
-    output_manager.console_update(table)
 
     required_modalities = list(set(required_modalities))
     required_prefixes = list(set(required_prefixes))
 
     output_manager.log_update(f" Required modalities: {required_modalities} | No. of modalities: {len(required_modalities)} "
                               f"| Required prefix for non-DICOM files: {required_prefixes} ")
-    output_manager.console_update(f"{constants.ANSI_ORANGE} Warning: Subjects which don't have the required modalities [check file prefix] "
-                                  f"will be skipped. {constants.ANSI_RESET}")
     output_manager.log_update(" Skipping subjects without the required modalities (check file prefix).\n"
                               " These subjects will be excluded from analysis and their data will not be used.")
 
@@ -113,7 +100,10 @@ def validate_model_name(model_name: str) -> bool:
 
 def print_error(message: str):
     """Prints an error message with standard formatting."""
-    print(f"{emoji.emojize(':cross_mark:')} {constants.ANSI_RED} {message} {constants.ANSI_RESET}")
+    text = Text()
+    text.append(f"{emoji.emojize(':cross_mark:')} ", style=constants.CLI_COLORS["error"])
+    text.append(message, style=f"bold {constants.CLI_COLORS['error']}")
+    ERROR_CONSOLE.print(text)
 
 
 def select_lion_compliant_subjects(subject_paths: list[str], modality_tags: list[str], output_manager: system.OutputManager) -> list[str]:
@@ -139,7 +129,11 @@ def select_lion_compliant_subjects(subject_paths: list[str], modality_tags: list
         prefixes = [file.startswith(tag) for tag in modality_tags for file in files]
         if sum(prefixes) == len(modality_tags):
             lion_compliant_subjects.append(subject_path)
-    output_manager.console_update(f"{constants.ANSI_ORANGE} Number of lion compliant subjects: {len(lion_compliant_subjects)} out of {len(subject_paths)} {constants.ANSI_RESET}")
+    output_manager.message(
+        f" Number of LION compliant subjects: {len(lion_compliant_subjects)} out of {len(subject_paths)}",
+        style="info",
+    )
     output_manager.log_update(f" Number of lion compliant subjects: {len(lion_compliant_subjects)} out of {len(subject_paths)}")
+    output_manager.console.print()
 
     return lion_compliant_subjects

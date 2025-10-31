@@ -277,7 +277,11 @@ def compute_tumor_metrics(pet_path: str, mask_path: str, output_manager: system.
 
     # Check if the mask is empty
     if np.all(mask_array == 0):
-        output_manager.console_update(f"Warning: The mask at {mask_path} contains no tumor regions.")
+        output_manager.message(
+            f"The mask at {mask_path} contains no tumor regions.",
+            style="warning",
+            icon=":warning:",
+        )
         return 0, 0  # Return 0 for both tumor volume and average intensity
 
     # Compute voxel volume
