@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lionz"
-version = "0.19.1"
+version = "0.19.2"
 description = "A toolkit for precise segmentation of tumors in PET/CT scans."
 readme = "README.md"
 license = "GPL-3.0-only"

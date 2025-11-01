@@ -25,7 +25,7 @@ KEY_NR_TRAINING = "nr_training_data"
 
 MODEL_METADATA = {
     "psma": {
-        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_psma_1005_11032025.zip",
+        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_psma_tumors_01112025.zip",
         KEY_FOLDER_NAME: "Dataset711_PSMA",
         TUMOR_LABEL: 6,
         KEY_IMAGING_TYPE: "clinical",
