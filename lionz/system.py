@@ -153,7 +153,7 @@ class OutputManager:
         self.console.print()
         self.console.print(header)
         self.console.print(accent_line)
-        self.console.print()
+        
 
     def message(self, message: str, *, style: str = "text", icon: str | None = None, emphasis: bool = False):
         resolved_style = constants.CLI_COLORS.get(style, style)

@@ -134,6 +134,5 @@ def select_lion_compliant_subjects(subject_paths: list[str], modality_tags: list
         style="info",
     )
     output_manager.log_update(f" Number of lion compliant subjects: {len(lion_compliant_subjects)} out of {len(subject_paths)}")
-    output_manager.console.print()
 
     return lion_compliant_subjects

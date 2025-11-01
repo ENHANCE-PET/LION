@@ -248,24 +248,58 @@ def execute_cli(
                 os.path.isdir(os.path.join(parent_folder, d))]
     lion_compliant_subjects = input_validation.select_lion_compliant_subjects(subjects, modalities, output_manager)
 
-    num_subjects = len(lion_compliant_subjects)
+    prediction_subjects: list[str] = []
+    skipped_subjects: list[str] = []
+    for subject_path in lion_compliant_subjects:
+        has_expected = False
+        for prefix in ('PT_', 'PT-'):
+            if file_utilities.get_files(subject_path, prefix, ('.nii', '.nii.gz')):
+                has_expected = True
+                break
+        if has_expected:
+            prediction_subjects.append(subject_path)
+        else:
+            skipped_subjects.append(subject_path)
+
+    for skipped_subject in skipped_subjects:
+        subject_name = os.path.basename(skipped_subject)
+        message = (
+            f"No files matching the expected prefix 'PT_' or 'PT-' were found for subject {subject_name}. "
+            "Skipping this subject."
+        )
+        output_manager.message(message, style="warning", icon=":warning:")
+        output_manager.log_update(f"   X {message}")
+
+    if prediction_subjects:
+        queued_text = Text(
+            " Subjects queued for prediction: ",
+            style=f"italic {constants.CLI_COLORS['info']}"
+        )
+        queued_text.append(
+            str(len(prediction_subjects)),
+            style=f"bold {constants.CLI_COLORS['accent']}"
+        )
+        output_manager.console.print(queued_text)
+
+    num_subjects = len(prediction_subjects)
     if num_subjects < 1:
         output_manager.message(
             "No LION compliant subject found to continue!",
             style="error",
-            icon=":cross_mark:",
+            icon=" :cross_mark:",
             emphasis=True,
         )
         output_manager.message(
             "See: https://github.com/LalithShiyam/LION#directory-conventions-for-lion-%EF%B8%8F",
             style="info",
-            icon=":light_bulb:",
+            icon=" :light_bulb:",
         )
         return
 
     # -------------------------------------------------
     # RUN PREDICTION ONLY FOR LION COMPLIANT SUBJECTS
     # -------------------------------------------------
+    output_manager.console.print()
     output_manager.section("Prediction", ":crystal_ball:")
     output_manager.log_update(' ')
     output_manager.log_update(' PERFORMING PREDICTION:')
@@ -281,7 +315,7 @@ def execute_cli(
         processed_subjects = 0
         output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
 
-        compliant_count = len(lion_compliant_subjects)
+        compliant_count = len(prediction_subjects)
         if device_count is not None and device_count > 1:
             accelerator_assignments = [f"{accelerator}:{i % device_count}" for i in range(compliant_count)]
         else:
@@ -289,7 +323,7 @@ def execute_cli(
 
         with concurrent.futures.ProcessPoolExecutor(max_workers=lion_instances, mp_context=mp_context) as executor:
             futures = []
-            for i, (subject, accelerator) in enumerate(zip(lion_compliant_subjects, accelerator_assignments)):
+            for i, (subject, accelerator) in enumerate(zip(prediction_subjects, accelerator_assignments)):
                 futures.append(
                     executor.submit(
                         lion_subject,
@@ -309,7 +343,7 @@ def execute_cli(
                 output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
 
     else:
-        for i, subject in enumerate(lion_compliant_subjects):
+        for i, subject in enumerate(prediction_subjects):
             lion_subject(
                 subject,
                 i,
@@ -323,7 +357,8 @@ def execute_cli(
 
     end_total_time = time.time()
     total_elapsed_time = (end_total_time - start_total_time) / 60
-    time_per_dataset = total_elapsed_time / len(lion_compliant_subjects)
+    processed_datasets = max(len(prediction_subjects), 1)
+    time_per_dataset = total_elapsed_time / processed_datasets
     time_per_model = time_per_dataset / model_count_for_stats
 
     completion_message = (
@@ -333,7 +368,7 @@ def execute_cli(
     output_manager.spinner_succeed(completion_message)
     output_manager.log_update(f' ')
     output_manager.log_update(f' ALL SUBJECTS PROCESSED')
-    output_manager.log_update(f'  - Number of Subjects: {len(lion_compliant_subjects)}')
+    output_manager.log_update(f'  - Number of Subjects: {len(prediction_subjects)}')
     output_manager.log_update(f'  - Number of Models:   {model_count}')
     output_manager.log_update(f'  - Time (total):       {round(total_elapsed_time, 1)}min')
     output_manager.log_update(f'  - Time (per subject): {round(time_per_dataset, 2)}min')
@@ -556,7 +591,22 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
     output_manager.log_update(' RUNNING PREDICTION:')
     output_manager.log_update(' ')
 
-    file_path = file_utilities.get_files(subject, 'PT_', ('.nii', '.nii.gz'))[0]
+    modality_files = []
+    for prefix in ('PT_', 'PT-'):
+        modality_files = file_utilities.get_files(subject, prefix, ('.nii', '.nii.gz'))
+        if modality_files:
+            break
+
+    if not modality_files:
+        message = (
+            f"No files matching the expected prefix 'PT_' or 'PT-' were found for subject {subject_name}. "
+            "Skipping this subject."
+        )
+        output_manager.message(message, style="warning", icon=":warning:")
+        output_manager.log_update(f"   X {message}")
+        return subject_peak_performance
+
+    file_path = modality_files[0]
     image = SimpleITK.ReadImage(file_path)
     file_name = file_utilities.get_nifti_file_stem(file_path)
 
