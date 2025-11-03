@@ -224,7 +224,7 @@ def execute_cli(
         output_manager.message(
             f"Number of LION instances run in parallel: {lion_instances}",
             style="accent",
-            icon=":lion_face:",
+            icon=" :lion_face:",
         )
 
 
