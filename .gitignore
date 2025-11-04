@@ -69,3 +69,5 @@ lionz-psma-*/
 
 # logs
 *.log
+# Local scripts
+test.py
