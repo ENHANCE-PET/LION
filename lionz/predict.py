@@ -20,6 +20,9 @@ from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
 from lionz import models
 from typing import Tuple, List, Dict, Iterator
 
+PredictorCacheKey = tuple[str, str]
+_PREDICTOR_CACHE: Dict[PredictorCacheKey, nnUNetPredictor] = {}
+
 
 def initialize_predictor(model: models.Model, accelerator: str) -> nnUNetPredictor:
     """
@@ -35,6 +38,15 @@ def initialize_predictor(model: models.Model, accelerator: str) -> nnUNetPredict
     device = torch.device(accelerator)
     predictor = nnUNetPredictor(allow_tqdm=False, device=device)
     predictor.initialize_from_trained_model_folder(model.configuration_directory, use_folds=("all",))
+    return predictor
+
+
+def _get_cached_predictor(model: models.Model, accelerator: str) -> nnUNetPredictor:
+    key: PredictorCacheKey = (model.configuration_directory, accelerator)
+    predictor = _PREDICTOR_CACHE.get(key)
+    if predictor is None:
+        predictor = initialize_predictor(model, accelerator)
+        _PREDICTOR_CACHE[key] = predictor
     return predictor
 
 
@@ -74,7 +86,7 @@ def predict_from_array_by_iterator(image_array: np.ndarray, model: models.Model,
         sys.stderr = nnunet_log_file
 
     try:
-        predictor = initialize_predictor(model, accelerator)
+        predictor = _get_cached_predictor(model, accelerator)
         image_properties = {
             'spacing': model.voxel_spacing
         }
@@ -93,4 +105,3 @@ def predict_from_array_by_iterator(image_array: np.ndarray, model: models.Model,
         sys.stderr = original_stderr
         if nnunet_log_filename is not None and nnunet_log_file is not None:
             nnunet_log_file.close()
-

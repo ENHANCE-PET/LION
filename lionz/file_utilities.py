@@ -144,6 +144,29 @@ def get_files(directory: str, prefix: str, suffix: str | tuple) -> list[str]:
     return files
 
 
+def find_first_matching_file(
+    directory: str,
+    prefixes: tuple[str, ...] = ("PT_", "PT-"),
+    suffixes: tuple[str, ...] = (".nii", ".nii.gz"),
+) -> str | None:
+    """
+    Returns the first file in *directory* that matches any prefix/suffix combination.
+
+    The function iterates prefixes in order and returns the first match so callers can
+    express preference (e.g., prefer PT_ over PT-).
+
+    :param directory: Directory to search.
+    :param prefixes: Tuple of filename prefixes to match.
+    :param suffixes: Tuple of filename suffixes to match.
+    :return: Absolute path to the first matching file, or ``None`` if nothing matches.
+    """
+    for prefix in prefixes:
+        matching_files = get_files(directory, prefix, suffixes)
+        if matching_files:
+            return matching_files[0]
+    return None
+
+
 def create_directory(directory_path: str) -> str:
     """
     Creates a directory at the specified path and returns its path.

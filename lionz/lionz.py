@@ -65,13 +65,16 @@ os.environ["nnUNet_results"] = ""
 
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Iterable, Sequence
 
 import colorama
 import emoji
 import rich_click as click
 import rich_click
 import SimpleITK
+import torch
 import multiprocessing as mp
 import concurrent.futures
 from rich.text import Text
@@ -104,59 +107,35 @@ from lionz.models import (
 from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2
 
 
-def execute_cli(
-    main_directory: str,
-    model_name: str,
-    threshold: float | None,
-    verbose_console: bool,
-    verbose_log: bool,
-    generate_mip: bool,
-    lions_pride: int | None,
-) -> None:
-    logging.basicConfig(
-        format="%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
-        level=logging.INFO,
-        filename=datetime.now().strftime(f"lionz-v.{constants.VERSION}.%H-%M-%d-%m-%Y.log"),
-        filemode="w",
-    )
-    colorama.init()
+@dataclass
+class SubjectQueue:
+    """Container describing which subjects will be processed and which were skipped."""
 
-    output_manager = system.OutputManager(verbose_console, verbose_log)
-    output_manager.display_logo()
-    print('')
-    output_manager.display_citation()
+    queued: list[str]
+    skipped: list[str]
 
-    parent_folder = os.path.abspath(main_directory)
-    selected_model = model_name
-    accelerator, device_count = system.check_device(output_manager, announce=False)
+    def __bool__(self) -> bool:  # pragma: no cover - convenience
+        return bool(self.queued)
 
-    effective_threshold = threshold
-    generate_mip_output = generate_mip
-    lion_instances = lions_pride
+    @property
+    def total(self) -> int:
+        return len(self.queued)
 
-    output_manager.configure_logging(parent_folder)
-    output_manager.log_update("----------------------------------------------------------------------------------------------------")
-    output_manager.log_update(
-        f"                                     STARTING LIONZ-v.{constants.VERSION}                                         "
-    )
-    output_manager.log_update("----------------------------------------------------------------------------------------------------")
 
-    # ----------------------------------
-    # INPUT VALIDATION AND PREPARATION
-    # ----------------------------------
-    output_manager.log_update(' ')
-    output_manager.log_update('- Main directory: ' + parent_folder)
-    output_manager.log_update('- Model name: ' + selected_model)
-    output_manager.log_update(' ')
+def _resolve_model_identifiers(model_name: str | Sequence[str]) -> list[str]:
+    if isinstance(model_name, str):
+        return [model_name]
+    return list(model_name)
 
-    model_identifiers = selected_model if isinstance(selected_model, list) else [selected_model]
+
+def _model_overview_note(model_identifiers: Sequence[str], accelerator: str, device_count: int | None) -> Text:
     note_text = Text(justify="left")
     for index, model_identifier in enumerate(model_identifiers):
         metadata = MODEL_METADATA.get(model_identifier, {})
         imaging_type = metadata.get(KEY_IMAGING_TYPE, "clin").title()
         modality_label = metadata.get(KEY_MODALITY, "PT")
         required_modalities = metadata.get(KEY_REQUIRED_MODALITIES) or [modality_label]
-        required_prefixes = metadata.get(KEY_REQUIRED_PREFIXES) or [modality_label.replace('-', '_') + "_"]
+        required_prefixes = metadata.get(KEY_REQUIRED_PREFIXES) or [modality_label.replace("-", "_") + "_"]
         training_count = metadata.get(KEY_NR_TRAINING, "Not available")
 
         if index:
@@ -188,17 +167,178 @@ def execute_cli(
                 f":high_voltage: CUDA is available with {device_count} GPU(s). Predictions will be run on GPU."
             )
         else:
-            device_line = emoji.emojize(
-                ":high_voltage: CUDA is available. Predictions will be run on GPU."
-            )
+            device_line = emoji.emojize(":high_voltage: CUDA is available. Predictions will be run on GPU.")
     else:
-        device_line = emoji.emojize(
-            ":gear: CUDA/MPS not available. Predictions will be run on CPU."
-        )
+        device_line = emoji.emojize(":gear: CUDA/MPS not available. Predictions will be run on CPU.")
 
     note_text.append(device_line, style=constants.CLI_COLORS["warning"])
+    return note_text
 
-    output_manager.context_panel("Note", note_text, icon=":memo:")
+
+def _collect_prediction_subjects(
+    parent_folder: str,
+    required_modalities: Sequence[str],
+    output_manager: system.OutputManager,
+) -> SubjectQueue:
+    subjects = [os.path.join(parent_folder, d) for d in os.listdir(parent_folder) if os.path.isdir(os.path.join(parent_folder, d))]
+    lion_compliant_subjects = input_validation.select_lion_compliant_subjects(subjects, required_modalities, output_manager)
+
+    prediction_subjects: list[str] = []
+    skipped_subjects: list[str] = []
+    for subject_path in lion_compliant_subjects:
+        modality_file = file_utilities.find_first_matching_file(subject_path)
+        if modality_file:
+            prediction_subjects.append(subject_path)
+        else:
+            skipped_subjects.append(subject_path)
+
+    for skipped_subject in skipped_subjects:
+        subject_name = os.path.basename(skipped_subject)
+        message = (
+            f"No files matching the expected prefix 'PT_' or 'PT-' were found for subject {subject_name}. "
+            "Skipping this subject."
+        )
+        output_manager.message(message, style="warning", icon=":warning:")
+        output_manager.log_update(f"   X {message}")
+
+    if prediction_subjects:
+        queued_text = Text(" Subjects queued for prediction: ", style=f"italic {constants.CLI_COLORS['info']}")
+        queued_text.append(str(len(prediction_subjects)), style=f"bold {constants.CLI_COLORS['accent']}")
+        output_manager.console.print(queued_text)
+
+    return SubjectQueue(prediction_subjects, skipped_subjects)
+
+
+def _build_device_assignments(accelerator: str, device_count: int | None, job_count: int) -> list[str]:
+    if device_count is not None and device_count > 1:
+        return [f"{accelerator}:{i % device_count}" for i in range(job_count)]
+    return [accelerator] * job_count
+
+
+def _ensure_accelerator_ready(accelerator: str) -> None:
+    """
+    Run a minimal tensor operation to ensure the selected accelerator works at runtime.
+
+    Raises a ClickException with contextual information if the operation fails.
+    """
+    if accelerator == "cpu":
+        return
+
+    device = accelerator if accelerator != "cuda" else "cuda:0"
+    try:
+        test_tensor = torch.ones(1, device=device)
+        _ = (test_tensor * 2).cpu()
+    except Exception as exc:  # pragma: no cover - depends on runtime/device
+        raise click.ClickException(
+            f"{accelerator.upper()} is reported as available but failed an initialization smoke test: {exc}"
+        ) from exc
+
+
+def _run_predictions(
+    subjects: Sequence[str],
+    model_routine: dict,
+    accelerator: str,
+    device_count: int | None,
+    output_manager: system.OutputManager,
+    threshold: float | None,
+    generate_mip: bool,
+    lion_instances: int | None,
+) -> None:
+    num_subjects = len(subjects)
+    if not num_subjects:
+        return
+
+    output_manager.spinner_start()
+
+    if lion_instances is not None:
+        output_manager.log_update(f"- Branching out with {lion_instances} concurrent jobs.")
+        mp_context = mp.get_context("spawn")
+        processed_subjects = 0
+        output_manager.spinner_update(f"[{processed_subjects}/{num_subjects}] subjects processed.")
+
+        assignments = _build_device_assignments(accelerator, device_count, num_subjects)
+        with concurrent.futures.ProcessPoolExecutor(max_workers=lion_instances, mp_context=mp_context) as executor:
+            futures = []
+            for index, (subject, assignment) in enumerate(zip(subjects, assignments)):
+                futures.append(
+                    executor.submit(
+                        lion_subject,
+                        subject,
+                        index,
+                        num_subjects,
+                        model_routine,
+                        assignment,
+                        None,
+                        threshold,
+                        generate_mip,
+                    )
+                )
+
+            for _ in concurrent.futures.as_completed(futures):
+                processed_subjects += 1
+                output_manager.spinner_update(f"[{processed_subjects}/{num_subjects}] subjects processed.")
+    else:
+        for index, subject in enumerate(subjects):
+            lion_subject(
+                subject,
+                index,
+                num_subjects,
+                model_routine,
+                accelerator,
+                output_manager,
+                threshold,
+                generate_mip,
+            )
+
+
+def execute_cli(
+    main_directory: str,
+    model_name: str,
+    threshold: float | None,
+    verbose_console: bool,
+    verbose_log: bool,
+    generate_mip: bool,
+    lions_pride: int | None,
+) -> None:
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
+        level=logging.INFO,
+        filename=datetime.now().strftime(f"lionz-v.{constants.VERSION}.%H-%M-%d-%m-%Y.log"),
+        filemode="w",
+    )
+    colorama.init()
+
+    output_manager = system.OutputManager(verbose_console, verbose_log)
+    output_manager.display_logo()
+    print('')
+    output_manager.display_citation()
+
+    parent_folder = os.path.abspath(main_directory)
+    selected_models = _resolve_model_identifiers(model_name)
+    selected_model = model_name
+    accelerator, device_count = system.check_device(output_manager, announce=False)
+    _ensure_accelerator_ready(accelerator)
+
+    effective_threshold = threshold
+    generate_mip_output = generate_mip
+    lion_instances = lions_pride
+
+    output_manager.configure_logging(parent_folder)
+    output_manager.log_update("----------------------------------------------------------------------------------------------------")
+    output_manager.log_update(
+        f"                                     STARTING LIONZ-v.{constants.VERSION}                                         "
+    )
+    output_manager.log_update("----------------------------------------------------------------------------------------------------")
+
+    # ----------------------------------
+    # INPUT VALIDATION AND PREPARATION
+    # ----------------------------------
+    output_manager.log_update(' ')
+    output_manager.log_update('- Main directory: ' + parent_folder)
+    output_manager.log_update('- Model name(s): ' + ", ".join(selected_models))
+    output_manager.log_update(' ')
+
+    output_manager.context_panel("Note", _model_overview_note(selected_models, accelerator, device_count), icon=":memo:")
 
     # ------------------------------
     # DOWNLOAD THE MODEL
@@ -244,45 +384,9 @@ def execute_cli(
     # CHECK FOR LIONZ COMPLIANCE
     # ------------------------------
 
-    subjects = [os.path.join(parent_folder, d) for d in os.listdir(parent_folder) if
-                os.path.isdir(os.path.join(parent_folder, d))]
-    lion_compliant_subjects = input_validation.select_lion_compliant_subjects(subjects, modalities, output_manager)
-
-    prediction_subjects: list[str] = []
-    skipped_subjects: list[str] = []
-    for subject_path in lion_compliant_subjects:
-        has_expected = False
-        for prefix in ('PT_', 'PT-'):
-            if file_utilities.get_files(subject_path, prefix, ('.nii', '.nii.gz')):
-                has_expected = True
-                break
-        if has_expected:
-            prediction_subjects.append(subject_path)
-        else:
-            skipped_subjects.append(subject_path)
-
-    for skipped_subject in skipped_subjects:
-        subject_name = os.path.basename(skipped_subject)
-        message = (
-            f"No files matching the expected prefix 'PT_' or 'PT-' were found for subject {subject_name}. "
-            "Skipping this subject."
-        )
-        output_manager.message(message, style="warning", icon=":warning:")
-        output_manager.log_update(f"   X {message}")
-
-    if prediction_subjects:
-        queued_text = Text(
-            " Subjects queued for prediction: ",
-            style=f"italic {constants.CLI_COLORS['info']}"
-        )
-        queued_text.append(
-            str(len(prediction_subjects)),
-            style=f"bold {constants.CLI_COLORS['accent']}"
-        )
-        output_manager.console.print(queued_text)
-
-    num_subjects = len(prediction_subjects)
-    if num_subjects < 1:
+    queue = _collect_prediction_subjects(parent_folder, modalities, output_manager)
+    num_subjects = queue.total
+    if not queue:
         output_manager.message(
             "No LION compliant subject found to continue!",
             style="error",
@@ -308,56 +412,20 @@ def execute_cli(
     output_manager.spinner_start()
     start_total_time = time.time()
 
-    if lion_instances is not None:
-        output_manager.log_update(f"- Branching out with {lion_instances} concurrent jobs.")
-
-        mp_context = mp.get_context('spawn')
-        processed_subjects = 0
-        output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
-
-        compliant_count = len(prediction_subjects)
-        if device_count is not None and device_count > 1:
-            accelerator_assignments = [f"{accelerator}:{i % device_count}" for i in range(compliant_count)]
-        else:
-            accelerator_assignments = [accelerator] * compliant_count
-
-        with concurrent.futures.ProcessPoolExecutor(max_workers=lion_instances, mp_context=mp_context) as executor:
-            futures = []
-            for i, (subject, accelerator) in enumerate(zip(prediction_subjects, accelerator_assignments)):
-                futures.append(
-                    executor.submit(
-                        lion_subject,
-                        subject,
-                        i,
-                        num_subjects,
-                        model_routine,
-                        accelerator,
-                        None,
-                        effective_threshold,
-                        generate_mip_output,
-                    )
-                )
-
-            for _ in concurrent.futures.as_completed(futures):
-                processed_subjects += 1
-                output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
-
-    else:
-        for i, subject in enumerate(prediction_subjects):
-            lion_subject(
-                subject,
-                i,
-                num_subjects,
-                model_routine,
-                accelerator,
-                output_manager,
-                effective_threshold,
-                generate_mip_output,
-            )
+    _run_predictions(
+        queue.queued,
+        model_routine,
+        accelerator,
+        device_count,
+        output_manager,
+        effective_threshold,
+        generate_mip_output,
+        lion_instances,
+    )
 
     end_total_time = time.time()
     total_elapsed_time = (end_total_time - start_total_time) / 60
-    processed_datasets = max(len(prediction_subjects), 1)
+    processed_datasets = max(queue.total, 1)
     time_per_dataset = total_elapsed_time / processed_datasets
     time_per_model = time_per_dataset / model_count_for_stats
 
@@ -368,7 +436,9 @@ def execute_cli(
     output_manager.spinner_succeed(completion_message)
     output_manager.log_update(f' ')
     output_manager.log_update(f' ALL SUBJECTS PROCESSED')
-    output_manager.log_update(f'  - Number of Subjects: {len(prediction_subjects)}')
+    output_manager.log_update(f'  - Number of Subjects: {queue.total}')
+    if queue.skipped:
+        output_manager.log_update(f'  - Skipped (missing PT files): {len(queue.skipped)}')
     output_manager.log_update(f'  - Number of Models:   {model_count}')
     output_manager.log_update(f'  - Time (total):       {round(total_elapsed_time, 1)}min')
     output_manager.log_update(f'  - Time (per subject): {round(time_per_dataset, 2)}min')
@@ -591,13 +661,9 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
     output_manager.log_update(' RUNNING PREDICTION:')
     output_manager.log_update(' ')
 
-    modality_files = []
-    for prefix in ('PT_', 'PT-'):
-        modality_files = file_utilities.get_files(subject, prefix, ('.nii', '.nii.gz'))
-        if modality_files:
-            break
+    modality_file = file_utilities.find_first_matching_file(subject)
 
-    if not modality_files:
+    if not modality_file:
         message = (
             f"No files matching the expected prefix 'PT_' or 'PT-' were found for subject {subject_name}. "
             "Skipping this subject."
@@ -606,9 +672,8 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
         output_manager.log_update(f"   X {message}")
         return subject_peak_performance
 
-    file_path = modality_files[0]
-    image = SimpleITK.ReadImage(file_path)
-    file_name = file_utilities.get_nifti_file_stem(file_path)
+    image = SimpleITK.ReadImage(modality_file)
+    file_name = file_utilities.get_nifti_file_stem(modality_file)
 
     for desired_spacing, model_workflows in model_routine.items():
         resampling_time_start = time.time()
@@ -669,7 +734,7 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
             # EXTRACT TUMOR METRICS
             # ----------------------------------
 
-            tumor_volume, average_intensity = image_processing.compute_tumor_metrics(file_path,
+            tumor_volume, average_intensity = image_processing.compute_tumor_metrics(modality_file,
                                                                                      segmentation_image_path, output_manager)
             # if tumor_volume is zero then the segmentation should have a suffix _no_tumor_seg.nii.gz
             if tumor_volume == 0:

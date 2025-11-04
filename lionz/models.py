@@ -242,7 +242,6 @@ class Model:
             f" Voxel Spacing: {self.voxel_spacing}",
             f" Imaging Type: {self.imaging_type}",
             f" Modality: {self.modality}",
-            f" Region: {self.region}",
             f" Multilabel Prefix: {self.multilabel_prefix}",
             f" Organ Indices:",
         ]
