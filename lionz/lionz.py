@@ -52,7 +52,7 @@ download : Handles downloading of data, models, or other necessary resources.
 
 __author__ = "Lalith kumar shiyam sundar, Sebastian Gutschmayer, Manuel pires"
 __email__ = "lalith.shiyamsundar@meduniwien.ac.at, sebastian.gutschmayer@meduniwien.ac.at, manuel.pires@meduniwien.ac.at"
-__version__ = "0.1"
+__version__ = "0.19.6"
 
 # Imports for the module
 import os
