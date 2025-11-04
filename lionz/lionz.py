@@ -474,7 +474,12 @@ def main(
 
 
 def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
-         model_name: str, output_dir: str = None, accelerator: str = None, threshold: float | None = None) -> str | numpy.ndarray | SimpleITK.Image:
+         model_name: str,
+         output_dir: str = None,
+         accelerator: str = None,
+         threshold: float | None = None,
+         verbose_console: bool = False,
+         verbose_log: bool = False) -> str | numpy.ndarray | SimpleITK.Image:
     """
     Execute the LION tumour segmentation process.
 
@@ -494,6 +499,12 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
 
     :param threshold: Optional threshold value applied to the resulting segmentations.
     :type threshold: Optional[float]
+
+    :param verbose_console: Enable rich console output (progress messages, spinner).
+    :type verbose_console: Optional[bool]
+
+    :param verbose_log: Enable nnU-Net and pipeline logging to disk.
+    :type verbose_log: Optional[bool]
 
     :return: The output type aligns with the input type:
              - str (file path): If `input_data` is a file path.
@@ -525,24 +536,42 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
             "Invalid input format. `input_data` must be either a file path (str), "
             "a SimpleITK.Image, or a tuple (numpy array, spacing)."
         )
-    output_manager = system.OutputManager(False, False)
+    output_manager = system.OutputManager(verbose_console, verbose_log)
+
+    if verbose_console:
+        output_manager.console_update("Starting LION inference…")
 
     model_path = system.MODELS_DIRECTORY_PATH
     file_utilities.create_directory(model_path)
     model_routine = models.construct_model_routine(model_name, output_manager)
 
+    if verbose_log:
+        log_directory = output_dir if output_dir is not None else os.getcwd()
+        output_manager.configure_logging(log_directory)
+
     for desired_spacing, model_workflows in model_routine.items():
+        if verbose_console:
+            spacing_label = "x".join(map(str, desired_spacing))
+            output_manager.console_update(f"Resampling input at spacing {spacing_label}…")
+
         resampled_array = image_processing.ImageResampler.resample_image_SimpleITK_DASK_array(image, 'bspline',
                                                                                               desired_spacing)
         for model_workflow in model_workflows:
+            if verbose_console:
+                output_manager.console_update(f"Running prediction with {model_workflow.target_model}…")
+
+            nnunet_log_target = output_manager.nnunet_log_filename if verbose_log else os.devnull
             segmentation_array = predict.predict_from_array_by_iterator(resampled_array, model_workflow[0], accelerator,
-                                                                        os.devnull, threshold)
+                                                                        nnunet_log_target)
 
             segmentation = SimpleITK.GetImageFromArray(segmentation_array)
             segmentation.SetSpacing(desired_spacing)
             segmentation.SetOrigin(image.GetOrigin())
             segmentation.SetDirection(image.GetDirection())
             resampled_segmentation = image_processing.ImageResampler.resample_segmentation(image, segmentation)
+
+            if threshold is not None:
+                resampled_segmentation = image_processing.threshold_segmentation_sitk(image, resampled_segmentation, threshold)
 
             # Return based on input type
             if isinstance(input_data, str):  # Return file path if input was a file path
@@ -552,10 +581,16 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
                     output_dir, f"{model_workflow.target_model.multilabel_prefix}segmentation_{file_name}.nii.gz"
                 )
                 SimpleITK.WriteImage(resampled_segmentation, segmentation_image_path)
+                if verbose_console:
+                    output_manager.console_update(f"Segmentation saved to {segmentation_image_path}")
                 return segmentation_image_path
             elif isinstance(input_data, SimpleITK.Image):  # Return SimpleITK.Image if input was SimpleITK.Image
+                if verbose_console:
+                    output_manager.console_update("Returning segmentation as SimpleITK.Image")
                 return resampled_segmentation
             elif isinstance(input_data, tuple):  # Return numpy array if input was numpy array
+                if verbose_console:
+                    output_manager.console_update("Returning segmentation as numpy.ndarray")
                 return SimpleITK.GetArrayFromImage(resampled_segmentation)
 
 
