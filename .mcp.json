@@ -1,0 +1,6 @@
+{
+  "lion-mcp": {
+    "type": "stdio",
+    "command": ".venv/bin/lion-mcp"
+  }
+}

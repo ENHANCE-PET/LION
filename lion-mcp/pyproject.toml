@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lion-mcp"
+version = "0.1.0"
+description = "MCP server for organizing DICOM/NIfTI data into LION-compatible structure"
+readme = "README.md"
+license = "GPL-3.0-only"
+authors = [
+    { name = "Lalith Kumar Shiyam Sundar", email = "lalith.shiyamsundar@meduniwien.ac.at" }
+]
+keywords = ["mcp", "dicom", "nifti", "medical-imaging", "lionz"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "pydicom>=2.2.0",
+    "nibabel>=5.0.0",
+    "numpy<2.0",
+]
+requires-python = ">=3.10"
+
+[project.scripts]
+lion-mcp = "lion_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lion_mcp"]
