@@ -239,7 +239,7 @@ def execute_cli(
     num_subjects = len(prediction_subjects)
     if num_subjects < 1:
         output_manager.err("No LION compliant subjects found")
-        output_manager.info("See: https://github.com/LalithShiyam/LION#input-data-structure")
+        output_manager.info("See: https://github.com/ENHANCE-PET/LION#input-data-structure")
         return
 
     # -------------------------------------------------

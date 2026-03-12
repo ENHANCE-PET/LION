@@ -53,10 +53,10 @@ license-files = ["LICENSE"]
 lionz = "lionz.lionz:main"
 
 [project.urls]
-Homepage = "https://github.com/QIMP-Team/lionz"
-"Bug Tracker" = "https://github.com/QIMP-Team/lionz/issues"
+Homepage = "https://github.com/ENHANCE-PET/LION"
+"Bug Tracker" = "https://github.com/ENHANCE-PET/LION/issues"
 Documentation = "https://lionz.readthedocs.io/en/latest/"
-Source = "https://github.com/QIMP-Team/lionz"
+Source = "https://github.com/ENHANCE-PET/LION"
 
 [tool.setuptools.packages.find]
 where = ["."]

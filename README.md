@@ -32,7 +32,7 @@ pip install lionz
 
 **From source with uv**
 ```bash
-git clone https://github.com/QIMP-Team/LION.git
+git clone https://github.com/ENHANCE-PET/LION.git
 cd LION
 uv sync
 ```
