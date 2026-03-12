@@ -166,31 +166,100 @@ def spinner(label: str, console: Console) -> Generator[None, None, None]:
 
 
 class LiveSpinner:
-    """Updateable spinner for long-running operations."""
+    """Animated spinner with traveling gradient wave effect."""
 
     def __init__(self, console: Console):
+        import threading
         self.console = console
-        self.progress = Progress(
-            TextColumn("  "),
-            SpinnerColumn("dots", style=Style(color=CORAL)),
-            TextColumn(f"[{MUTED}]{{task.description}}[/{MUTED}]"),
-            console=console,
-            transient=True,
-        )
-        self.task_id = None
+        self.text = ""
+        self.running = False
+        self.thread = None
+        # Braille spinner frames
+        self._frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        # RGB colors for gradient interpolation
+        self._coral = (232, 116, 97)
+        self._greige = (181, 168, 154)
+        self._reset = "\033[0m"
+        self._frame_idx = 0
+        self._wave_pos = 0
 
     def start(self, text: str = ""):
-        self.progress.start()
-        self.task_id = self.progress.add_task(text, total=None)
+        import threading
+        self.text = text
+        self.running = True
+        self._frame_idx = 0
+        self._wave_pos = 0
+        self.thread = threading.Thread(target=self._animate, daemon=True)
+        self.thread.start()
 
     def update(self, text: str):
-        if self.task_id is not None:
-            self.progress.update(self.task_id, description=text)
+        self.text = text
+
+    def _lerp_color(self, t: float) -> str:
+        """Interpolate between coral and greige. t=0 is coral, t=1 is greige."""
+        t = max(0.0, min(1.0, t))
+        r = int(self._coral[0] + (self._greige[0] - self._coral[0]) * t)
+        g = int(self._coral[1] + (self._greige[1] - self._coral[1]) * t)
+        b = int(self._coral[2] + (self._greige[2] - self._coral[2]) * t)
+        return f"\033[38;2;{r};{g};{b}m"
+
+    def _animate(self):
+        import time
+        import sys
+        import math
+
+        # Try to get unbuffered tty output
+        try:
+            tty = open("/dev/tty", "w")
+        except OSError:
+            tty = sys.stderr
+
+        wave_width = 12  # Width of the traveling highlight
+
+        while self.running:
+            frame = self._frames[self._frame_idx % len(self._frames)]
+            text = self.text
+            text_len = len(text) if text else 1
+
+            # Build colored text with traveling wave
+            colored_text = ""
+            for i, char in enumerate(text):
+                # Calculate wave intensity using sine for smooth falloff
+                dist = abs(i - (self._wave_pos % (text_len + wave_width * 2)) + wave_width)
+                if dist < wave_width:
+                    # Use cosine for smooth wave shape (1 at center, 0 at edges)
+                    t = (1 - math.cos(math.pi * dist / wave_width)) / 2
+                else:
+                    t = 1.0  # Full greige outside wave
+                colored_text += self._lerp_color(t) + char
+
+            # Spinner stays coral
+            spinner_color = self._lerp_color(0)
+            line = f"\r\033[K  {spinner_color}{frame}{self._reset} {colored_text}{self._reset}"
+            tty.write(line)
+            tty.flush()
+
+            self._frame_idx += 1
+            self._wave_pos += 1
+            time.sleep(0.06)
+
+        if tty not in (sys.stderr, sys.stdout):
+            tty.close()
 
     def stop(self):
-        if self.progress.live.is_started:
-            self.progress.stop()
-        self.task_id = None
+        import sys
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=0.5)
+        # Clear line
+        try:
+            tty = open("/dev/tty", "w")
+            tty.write("\r\033[K")
+            tty.flush()
+            tty.close()
+        except OSError:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
 
 
 @contextmanager

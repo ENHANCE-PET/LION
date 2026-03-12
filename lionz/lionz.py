@@ -251,7 +251,7 @@ def execute_cli(
     output_manager.log_update(' PERFORMING PREDICTION:')
     output_manager.log_update(' ')
 
-    output_manager.spinner_start()
+    output_manager.spinner_start(f"[0/{num_subjects}] Initializing prediction...")
     start_total_time = time.time()
 
     if lion_instances is not None:
@@ -259,7 +259,7 @@ def execute_cli(
 
         mp_context = mp.get_context('spawn')
         processed_subjects = 0
-        output_manager.spinner_update(f'[{processed_subjects}/{num_subjects}] subjects processed.')
+        output_manager.spinner_update(f"[{processed_subjects}/{num_subjects}] subjects processed.")
 
         compliant_count = len(prediction_subjects)
         if device_count is not None and device_count > 1:
