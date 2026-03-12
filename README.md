@@ -21,7 +21,7 @@
 ## Quick Start
 
 ```bash
-pip install lionz
+pip install git+https://github.com/ENHANCE-PET/LION.git
 lionz -d /path/to/data -m fdg
 ```
 
@@ -35,9 +35,9 @@ That's it. Models download automatically on first run.
 
 ## Installation
 
-**pip (recommended)**
+**From GitHub (recommended)**
 ```bash
-pip install lionz
+pip install git+https://github.com/ENHANCE-PET/LION.git
 ```
 
 **From source with uv**
