@@ -146,7 +146,7 @@ class Model:
                 output_manager.log_update(
                     f"    - A local instance of {self.model_identifier} has been detected."
                 )
-                output_manager.ok(f"Local instance of {self.model_identifier} detected")
+                output_manager.ok(f"{self.model_identifier.upper()} · Ready")
                 return
 
         # If folder doesn't exist or has been removed, proceed to download
@@ -201,7 +201,7 @@ class Model:
             json.dump({"url": self.url}, vf)
 
         output_manager.log_update(f"    - {self.model_identifier} - setup complete.")
-        output_manager.ok(f"{self.model_identifier} setup complete")
+        output_manager.ok(f"{self.model_identifier.upper()} · Ready")
         
     def __get_organ_indices(self) -> dict[int, str]:
         labels = self.dataset.get('labels', {})

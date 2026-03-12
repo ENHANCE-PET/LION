@@ -165,6 +165,34 @@ def spinner(label: str, console: Console) -> Generator[None, None, None]:
         yield
 
 
+class LiveSpinner:
+    """Updateable spinner for long-running operations."""
+
+    def __init__(self, console: Console):
+        self.console = console
+        self.progress = Progress(
+            TextColumn("  "),
+            SpinnerColumn("dots", style=Style(color=CORAL)),
+            TextColumn(f"[{MUTED}]{{task.description}}[/{MUTED}]"),
+            console=console,
+            transient=True,
+        )
+        self.task_id = None
+
+    def start(self, text: str = ""):
+        self.progress.start()
+        self.task_id = self.progress.add_task(text, total=None)
+
+    def update(self, text: str):
+        if self.task_id is not None:
+            self.progress.update(self.task_id, description=text)
+
+    def stop(self):
+        if self.progress.live.is_started:
+            self.progress.stop()
+        self.task_id = None
+
+
 @contextmanager
 def progress_bar(total: int, label: str, console: Console) -> Generator[object, None, None]:
     """Coral progress bar for countable operations."""

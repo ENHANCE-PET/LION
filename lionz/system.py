@@ -31,7 +31,7 @@ class OutputManager:
         self.console = Console(highlight=False, quiet=not self.verbose_console)
 
         self._section_counter = 0
-        self._spinner_ctx = None
+        self._spinner = None
 
         self.logger: logging.Logger | None = None
         self.nnunet_log_filename = os.devnull
@@ -112,21 +112,22 @@ class OutputManager:
         self.console.print(body)
 
     def spinner_start(self, text: str | None = None):
-        """Start a spinner (uses context manager internally)."""
+        """Start an updateable spinner."""
         if not self.verbose_console:
             return
-        self._spinner_ctx = theme.spinner(text or "", self.console)
-        self._spinner_ctx.__enter__()
+        self._spinner = theme.LiveSpinner(self.console)
+        self._spinner.start(text or "")
 
     def spinner_update(self, text: str | None = None):
-        """Update spinner text (no-op with context manager spinner)."""
-        pass
+        """Update spinner text."""
+        if hasattr(self, '_spinner') and self._spinner:
+            self._spinner.update(text or "")
 
     def spinner_stop(self):
         """Stop the spinner."""
-        if self._spinner_ctx:
-            self._spinner_ctx.__exit__(None, None, None)
-            self._spinner_ctx = None
+        if hasattr(self, '_spinner') and self._spinner:
+            self._spinner.stop()
+            self._spinner = None
 
     def spinner_succeed(self, text: str | None = None):
         """Stop spinner with success message."""
