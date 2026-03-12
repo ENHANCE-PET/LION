@@ -129,7 +129,7 @@ def select_lion_compliant_subjects(subject_paths: list[str], modality_tags: list
         if sum(prefixes) == len(modality_tags):
             lion_compliant_subjects.append(subject_path)
     output_manager.message(
-        f" Number of LION compliant subjects: {len(lion_compliant_subjects)} out of {len(subject_paths)}",
+        f"Number of LION compliant subjects: {len(lion_compliant_subjects)} out of {len(subject_paths)}",
         style="info",
     )
     output_manager.log_update(f" Number of lion compliant subjects: {len(lion_compliant_subjects)} out of {len(subject_paths)}")
