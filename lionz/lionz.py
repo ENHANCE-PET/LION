@@ -113,6 +113,7 @@ def execute_model_download(
     colorama.init()
     output_manager = system.OutputManager(verbose_console, verbose_log=False)
     output_manager.display_logo()
+    output_manager.display_citation()
 
     output_manager.console.print()
     theme.section("Model Download", output_manager.console, number="01")
@@ -120,7 +121,6 @@ def execute_model_download(
     # Determine output path
     if output_directory is None:
         model_output_path = system.MODELS_DIRECTORY_PATH
-        output_manager.info(f"Using default model directory")
     else:
         custom_root = os.path.abspath(output_directory)
         # Avoid double nesting if path already ends with models/nnunet_trained_models
@@ -129,9 +129,6 @@ def execute_model_download(
             model_output_path = custom_root
         else:
             model_output_path = os.path.join(custom_root, "models", "nnunet_trained_models")
-        output_manager.info(f"Custom model directory specified")
-
-    output_manager.console.print(theme.kv("Path", model_output_path))
 
     # Download each model
     for model_name in model_names:
@@ -141,9 +138,7 @@ def execute_model_download(
             continue
         models.Model(normalized_name, output_manager, base_directory=model_output_path)
 
-    output_manager.console.print()
-    output_manager.ok("Model download complete")
-    output_manager.info(f"Models stored at: {model_output_path}")
+    output_manager.ok(f"Saved to {model_output_path}")
 
 
 def execute_cli(
