@@ -50,13 +50,14 @@ AVAILABLE_MODELS = MODEL_METADATA.keys()
 
 
 class Model:
-    def __init__(self, model_identifier: str, output_manager: system.OutputManager):
+    def __init__(self, model_identifier: str, output_manager: system.OutputManager, base_directory: str | None = None):
         self.model_identifier = model_identifier
         self.folder_name = MODEL_METADATA[self.model_identifier][KEY_FOLDER_NAME]
         self.url = MODEL_METADATA[self.model_identifier][KEY_URL]
         self.tumor_label = MODEL_METADATA[self.model_identifier][TUMOR_LABEL]
         self.limit_fov = False
-        self.directory = os.path.join(system.MODELS_DIRECTORY_PATH, self.folder_name)
+        self.base_directory = base_directory or system.MODELS_DIRECTORY_PATH
+        self.directory = os.path.join(self.base_directory, self.folder_name)
 
         self.__download(output_manager)
         self.configuration_folders = self.__get_configuration_folders(output_manager)
@@ -150,15 +151,15 @@ class Model:
                 return
 
         # If folder doesn't exist or has been removed, proceed to download
-        if not os.path.exists(system.MODELS_DIRECTORY_PATH):
-            os.makedirs(system.MODELS_DIRECTORY_PATH)
+        if not os.path.exists(self.base_directory):
+            os.makedirs(self.base_directory)
 
         if not self.url:
             raise ValueError(f" No URL specified for model '{self.model_identifier}'.")
 
         output_manager.log_update(f"    - Downloading {self.model_identifier}")
         download_file_name = os.path.basename(self.url)
-        download_file_path = os.path.join(system.MODELS_DIRECTORY_PATH, download_file_name)
+        download_file_path = os.path.join(self.base_directory, download_file_name)
 
         response = requests.get(self.url, stream=True)
         if response.status_code != 200:
@@ -188,7 +189,7 @@ class Model:
                 total_size = sum(file.file_size for file in zip_ref.infolist())
                 task = progress.add_task(f"[white] Extracting {self.model_identifier}...", total=total_size)
                 for file in zip_ref.infolist():
-                    zip_ref.extract(file, system.MODELS_DIRECTORY_PATH)
+                    zip_ref.extract(file, self.base_directory)
                     progress.update(task, advance=file.file_size)
 
         output_manager.log_update(f"    - {self.model_identifier} extracted.")

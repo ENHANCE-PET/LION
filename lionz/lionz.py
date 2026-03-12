@@ -104,6 +104,51 @@ from lionz.models import (
 from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2
 
 
+def execute_model_download(
+    model_names: list[str],
+    output_directory: str | None,
+    verbose_console: bool,
+) -> None:
+    """Download models without running segmentation."""
+    colorama.init()
+    output_manager = system.OutputManager(verbose_console, verbose_log=False)
+    output_manager.display_logo()
+
+    output_manager.console.print()
+    theme.section("Model Download", output_manager.console, number="01")
+
+    # Determine output path
+    if output_directory is None:
+        model_output_path = system.MODELS_DIRECTORY_PATH
+        output_manager.info(f"Using default model directory")
+    else:
+        custom_root = os.path.abspath(output_directory)
+        # Avoid double nesting if path already ends with models/nnunet_trained_models
+        if os.path.basename(custom_root) == "nnunet_trained_models" and os.path.basename(
+                os.path.dirname(custom_root)) == "models":
+            model_output_path = custom_root
+        else:
+            model_output_path = os.path.join(custom_root, "models", "nnunet_trained_models")
+        output_manager.info(f"Custom model directory specified")
+
+    output_manager.console.print(theme.kv("Path", model_output_path))
+    output_manager.console.print()
+
+    # Download each model
+    for model_name in model_names:
+        normalized_name = model_name.lower()
+        if normalized_name not in AVAILABLE_MODELS:
+            output_manager.err(f"Invalid model: {model_name}")
+            continue
+        models.Model(normalized_name, output_manager, base_directory=model_output_path)
+
+    output_manager.console.print()
+    output_manager.ok("Model download complete")
+    output_manager.console.print()
+    output_manager.info(f"Models stored at: {model_output_path}")
+    output_manager.info("You can now copy this directory to another machine or use it offline.")
+
+
 def execute_cli(
     main_directory: str,
     model_name: str,
@@ -342,7 +387,8 @@ def execute_cli(
     "--main-directory",
     "main_directory",
     type=click.Path(path_type=str),
-    required=True,
+    required=False,
+    default=None,
     metavar="<MAIN_DIRECTORY>",
     help="Specify the main directory containing subject folders.",
 )
@@ -351,7 +397,8 @@ def execute_cli(
     "--model-name",
     "model_name",
     type=click.Choice(sorted(AVAILABLE_MODELS), case_sensitive=False),
-    required=True,
+    required=False,
+    default=None,
     metavar="<MODEL_NAME>",
     help="Select the model to run.",
 )
@@ -396,21 +443,57 @@ def execute_cli(
     metavar="<JOBS>",
     help="Number of concurrent jobs (set to 2 or more to enable parallel execution).",
 )
+@click.option(
+    "-md",
+    "--model-download",
+    "model_download",
+    type=click.Choice(sorted(AVAILABLE_MODELS), case_sensitive=False),
+    multiple=True,
+    metavar="<MODEL_NAME>",
+    help="Download model(s) without running segmentation. Can be specified multiple times.",
+)
+@click.option(
+    "-md-out",
+    "--model-download-directory",
+    "model_download_directory",
+    type=click.Path(path_type=str),
+    default=None,
+    metavar="<DIRECTORY>",
+    help="Custom directory to store downloaded models.",
+)
 def main(
-    main_directory: str,
-    model_name: str,
+    main_directory: str | None,
+    model_name: str | None,
     threshold: float | None,
     verbose_off: bool,
     logging_off: bool,
     generate_mip: bool,
     lions_pride: int | None,
+    model_download: tuple[str, ...],
+    model_download_directory: str | None,
 ) -> None:
     """
     LIONZ (Lesion segmentatION) — precise tumor segmentation for PET/CT datasets.
     """
-    normalized_model = model_name.lower()
     verbose_console = not verbose_off
     verbose_log = not logging_off
+
+    # Model download mode
+    if model_download:
+        execute_model_download(
+            model_names=list(model_download),
+            output_directory=model_download_directory,
+            verbose_console=verbose_console,
+        )
+        return
+
+    # Regular segmentation mode - validate required options
+    if not main_directory:
+        raise click.UsageError("Missing option '-d' / '--main-directory'. Required for segmentation.")
+    if not model_name:
+        raise click.UsageError("Missing option '-m' / '--model-name'. Required for segmentation.")
+
+    normalized_model = model_name.lower()
     try:
         execute_cli(
             main_directory=main_directory,
