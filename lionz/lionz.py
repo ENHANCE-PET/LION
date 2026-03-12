@@ -447,10 +447,10 @@ def execute_cli(
     "-md",
     "--model-download",
     "model_download",
-    type=click.Choice(sorted(AVAILABLE_MODELS), case_sensitive=False),
-    multiple=True,
-    metavar="<MODEL_NAME>",
-    help="Download model(s) without running segmentation. Can be specified multiple times.",
+    type=str,
+    default=None,
+    metavar="<MODEL_NAMES>",
+    help="Download model(s) without running segmentation (e.g., -md fdg,psma or -md fdg).",
 )
 @click.option(
     "-md-out",
@@ -469,7 +469,7 @@ def main(
     logging_off: bool,
     generate_mip: bool,
     lions_pride: int | None,
-    model_download: tuple[str, ...],
+    model_download: str | None,
     model_download_directory: str | None,
 ) -> None:
     """
@@ -480,8 +480,17 @@ def main(
 
     # Model download mode
     if model_download:
+        # Parse comma or space separated model names
+        model_names = [m.strip().lower() for m in model_download.replace(",", " ").split()]
+        # Validate model names
+        invalid_models = [m for m in model_names if m not in AVAILABLE_MODELS]
+        if invalid_models:
+            raise click.UsageError(
+                f"Invalid model(s): {', '.join(invalid_models)}. "
+                f"Available: {', '.join(sorted(AVAILABLE_MODELS))}"
+            )
         execute_model_download(
-            model_names=list(model_download),
+            model_names=model_names,
             output_directory=model_download_directory,
             verbose_console=verbose_console,
         )
