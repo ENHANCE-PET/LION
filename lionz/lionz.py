@@ -132,7 +132,6 @@ def execute_model_download(
         output_manager.info(f"Custom model directory specified")
 
     output_manager.console.print(theme.kv("Path", model_output_path))
-    output_manager.console.print()
 
     # Download each model
     for model_name in model_names:
@@ -144,9 +143,7 @@ def execute_model_download(
 
     output_manager.console.print()
     output_manager.ok("Model download complete")
-    output_manager.console.print()
     output_manager.info(f"Models stored at: {model_output_path}")
-    output_manager.info("You can now copy this directory to another machine or use it offline.")
 
 
 def execute_cli(
