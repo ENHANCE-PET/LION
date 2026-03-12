@@ -28,7 +28,7 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           python -m build
-          twine upload dist/*
+          twine upload --verbose dist/*
 
       - name: Wait for PyPI propagation
         run: |
