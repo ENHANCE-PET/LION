@@ -10,12 +10,6 @@
   <a href="https://pepy.tech/project/lionz"><img alt="Downloads" src="https://img.shields.io/pepy/dt/lionz?style=flat-square&color=E87461&label=Downloads"></a>
 </p>
 
-<p align="center">
-  <strong><a href="https://enhance.pet">ENHANCE.PET</a> &middot; QIMP &middot; Medical University of Vienna</strong><br>
-  Precise tumor segmentation for FDG and PSMA PET scans.<br>
-  CPU &middot; CUDA &middot; Apple Silicon
-</p>
-
 ---
 
 ## Quick Start
