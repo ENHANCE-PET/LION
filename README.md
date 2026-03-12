@@ -1,5 +1,7 @@
 <div align="center">
   <img src="/Images/lion.png" alt="LION" width="100%"/>
+  <h1>LION</h1>
+  <p>Fully automated tumor segmentation for FDG and PSMA PET scans</p>
 </div>
 
 <p align="center">
@@ -9,8 +11,6 @@
   <a href="https://www.apache.org/licenses/LICENSE-2.0"><img alt="License" src="https://img.shields.io/badge/License-Apache--2.0-B5A89A?style=flat-square&logo=apache&logoColor=white"></a>
   <a href="https://pepy.tech/project/lionz"><img alt="Downloads" src="https://img.shields.io/pepy/dt/lionz?style=flat-square&color=E87461&label=Downloads"></a>
 </p>
-
----
 
 ## Quick Start
 
