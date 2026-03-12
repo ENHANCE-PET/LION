@@ -132,8 +132,8 @@ if __name__ == '__main__':
 
 | Tracer | Model | Training Data | Status |
 |--------|-------|---------------|--------|
-| FDG | `fdg` | 5,341 patients | Stable |
-| PSMA | `psma` | 2,299 patients | Stable |
+| FDG | `fdg` | 5,235 patients | Stable |
+| PSMA | `psma` | 2,046 patients | Stable |
 
 ## Output Structure
 
