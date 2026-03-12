@@ -1,12 +1,22 @@
-![Lion-logo.png](/Images/lion.png)
+<div align="center">
+  <img src="/Images/lion.png" alt="LION" width="400"/>
+</div>
 
-# LION: PET Tumor Segmentation
+<p align="center">
+  <a href="https://pypi.org/project/lionz/"><img alt="PyPI" src="https://img.shields.io/pypi/v/lionz.svg?label=PyPI&style=flat-square&logo=python&logoColor=white&color=E87461"></a>
+  <a href="https://zenodo.org/badge/latestdoi/685935027"><img alt="DOI" src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.12626789-B5A89A?style=flat-square&labelColor=282a36&logo=zenodo&logoColor=white"></a>
+  <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-E87461?style=flat-square&logo=python&logoColor=white"></a>
+  <a href="https://www.apache.org/licenses/LICENSE-2.0"><img alt="License" src="https://img.shields.io/badge/License-Apache--2.0-B5A89A?style=flat-square&logo=apache&logoColor=white"></a>
+  <a href="https://pepy.tech/project/lionz"><img alt="Downloads" src="https://img.shields.io/pepy/dt/lionz?style=flat-square&color=E87461&label=Downloads"></a>
+</p>
 
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/lionz?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=MAGENTA&left_text=Downloads)](https://pepy.tech/projects/lionz)
-[![DOI](https://zenodo.org/badge/685935027.svg)](https://zenodo.org/badge/latestdoi/685935027)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+<p align="center">
+  <strong><a href="https://enhance.pet">ENHANCE.PET</a> &middot; QIMP &middot; Medical University of Vienna</strong><br>
+  Precise tumor segmentation for FDG and PSMA PET scans.<br>
+  CPU &middot; CUDA &middot; Apple Silicon
+</p>
 
-LION segments tumors in PET scans. It supports FDG and PSMA tracers, runs on CPU/CUDA/Apple Silicon, and works as both a CLI tool and Python library.
+---
 
 ## Quick Start
 
