@@ -25,7 +25,7 @@ KEY_NR_TRAINING = "nr_training_data"
 
 MODEL_METADATA = {
     "psma": {
-        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_psma_tumors_01112025.zip",
+        KEY_URL: "https://github.com/ENHANCE-PET/LION/releases/download/lionz-v.1.0.0/clin_pt_psma_2046_25112025.zip",
         KEY_FOLDER_NAME: "Dataset711_PSMA",
         TUMOR_LABEL: 6,
         KEY_IMAGING_TYPE: "clinical",
@@ -35,7 +35,7 @@ MODEL_METADATA = {
         KEY_NR_TRAINING: TRAINING_DATASET_SIZE_PSMA,
     },
     "fdg": {
-        KEY_URL: "https://enhance-pet.s3.eu-central-1.amazonaws.com/lion/clin_pt_fdg_5341_106062025.zip",
+        KEY_URL: "https://github.com/ENHANCE-PET/LION/releases/download/lionz-v.1.0.0/clin_pt_fdg_5235_17122025.zip",
         KEY_FOLDER_NAME: "Dataset789_Tumors",
         TUMOR_LABEL: 11,
         KEY_IMAGING_TYPE: "clinical",
@@ -43,7 +43,7 @@ MODEL_METADATA = {
         KEY_REQUIRED_MODALITIES: ["PT"],
         KEY_REQUIRED_PREFIXES: ["PT_"],
         KEY_NR_TRAINING: TRAINING_DATASET_SIZE_FDG,
-    },
+    }
 }
 
 AVAILABLE_MODELS = MODEL_METADATA.keys()
