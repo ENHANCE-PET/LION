@@ -10,7 +10,7 @@
   <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-E87461?style=flat-square&logo=python&logoColor=white"></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0"><img alt="License" src="https://img.shields.io/badge/License-Apache--2.0-B5A89A?style=flat-square&logo=apache&logoColor=white"></a>
   <a href="https://pepy.tech/project/lionz"><img alt="Downloads" src="https://img.shields.io/pepy/dt/lionz?style=flat-square&color=E87461&label=Downloads"></a>
-  <a href="https://pepy.tech/project/lionz"><img alt="Monthly" src="https://img.shields.io/pepy/dm/lionz?style=flat-square&color=B5A89A&label=Monthly"></a>
+  <a href="https://pypistats.org/packages/lionz"><img alt="Monthly" src="https://img.shields.io/pypi/dm/lionz?style=flat-square&color=B5A89A&label=Monthly"></a>
 </p>
 
 ## Quick Start
