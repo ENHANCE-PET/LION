@@ -184,6 +184,19 @@ Add to `.mcp.json`:
 - `validate_structure` - Check if directory is LION-ready
 - `get_lion_requirements` - Get structure documentation
 
+## Telemetry
+
+LION collects anonymous usage statistics to help us understand how the tool is used and prioritize development. This is completely optional.
+
+**What we collect:** version, model used, platform, accelerator type, number of subjects, success/failure
+
+**What we DON'T collect:** file paths, patient data, IP addresses, any identifiable information
+
+**Opt-out:**
+```bash
+export LIONZ_TELEMETRY=0
+```
+
 ## Citation
 
 ```

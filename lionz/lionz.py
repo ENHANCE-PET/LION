@@ -90,6 +90,7 @@ from lionz import image_processing
 from lionz import system
 from lionz import models
 from lionz import predict
+from lionz import telemetry
 from lionz.models import (
     AVAILABLE_MODELS,
     MODEL_METADATA,
@@ -378,6 +379,14 @@ def execute_cli(
     output_manager.log_update(f'                                     FINISHED LION-Z V.{constants.VERSION}                                       ')
     output_manager.log_update('----------------------------------------------------------------------------------------------------')
 
+    # Send anonymous telemetry (opt-out with LIONZ_TELEMETRY=0)
+    telemetry.send_telemetry(
+        model=selected_model,
+        accelerator=accelerator,
+        n_subjects=len(prediction_subjects),
+        success=True,
+    )
+
 
 @click.command(
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -572,6 +581,14 @@ def lion(input_data: str | tuple[numpy.ndarray, tuple[float, float, float]],
 
             if threshold is not None:
                 resampled_segmentation = image_processing.threshold_segmentation_sitk(image, resampled_segmentation, threshold)
+
+            # Send anonymous telemetry (opt-out with LIONZ_TELEMETRY=0)
+            telemetry.send_telemetry(
+                model=model_name if isinstance(model_name, str) else ",".join(model_name),
+                accelerator=accelerator,
+                n_subjects=1,
+                success=True,
+            )
 
             # Return based on input type
             if isinstance(input_data, str):  # Return file path if input was a file path
