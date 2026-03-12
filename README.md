@@ -4,7 +4,7 @@
 
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/lionz?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=MAGENTA&left_text=Downloads)](https://pepy.tech/projects/lionz)
 [![DOI](https://zenodo.org/badge/685935027.svg)](https://zenodo.org/badge/latestdoi/685935027)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-red.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 LION segments tumors in PET scans. It supports FDG and PSMA tracers, runs on CPU/CUDA/Apple Silicon, and works as both a CLI tool and Python library.
 

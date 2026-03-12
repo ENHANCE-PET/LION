@@ -7,7 +7,7 @@ name = "lionz"
 version = "0.19.6"
 description = "A toolkit for precise segmentation of tumors in PET/CT scans."
 readme = "README.md"
-license = "GPL-3.0-only"
+license = "Apache-2.0"
 authors = [
     { name = "Lalith Kumar Shiyam Sundar", email = "lalith.shiyamsundar@meduniwien.ac.at" },
     { name = "Sebastian Gutschmayer", email = "sebastian.gutschmayer@meduniwien.ac.at" },

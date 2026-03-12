@@ -85,11 +85,7 @@ class Model:
         folders = [item for item in items if not item.startswith(".") and item.count("__") == 2 and os.path.isdir(os.path.join(self.directory, item))]
 
         if len(folders) > 1:
-            output_manager.message(
-                "More than one configuration folder found. Using the first one encountered.",
-                style="info",
-                icon=":information:",
-            )
+            output_manager.info("More than one configuration folder found. Using the first one encountered.")
 
         if not folders:
             raise ValueError(f"No valid configuration folders found in {self.directory}")
@@ -143,21 +139,14 @@ class Model:
 
             # If the existing folder's URL doesn't match the new URL, remove folder
             if old_url != self.url:
-                output_manager.message(
-                    f" Model version mismatch detected for '{self.model_identifier}'. Removing outdated files before downloading the latest model...",
-                    style="warning",
-                    icon=":warning:",
-                )
+                output_manager.warn(f"Model version mismatch for '{self.model_identifier}', downloading latest...")
                 shutil.rmtree(self.directory, ignore_errors=True)
             else:
                 # If the URL matches, we skip re-downloading
                 output_manager.log_update(
                     f"    - A local instance of {self.model_identifier} has been detected."
                 )
-                output_manager.message(
-                    f" A local instance of {self.model_identifier} has been detected.",
-                    style="success",
-                )
+                output_manager.ok(f"Local instance of {self.model_identifier} detected")
                 return
 
         # If folder doesn't exist or has been removed, proceed to download
@@ -212,11 +201,7 @@ class Model:
             json.dump({"url": self.url}, vf)
 
         output_manager.log_update(f"    - {self.model_identifier} - setup complete.")
-        output_manager.message(
-            f"{self.model_identifier} - setup complete.",
-            style="success",
-            icon=":check_mark_button:",
-        )
+        output_manager.ok(f"{self.model_identifier} setup complete")
         
     def __get_organ_indices(self) -> dict[int, str]:
         labels = self.dataset.get('labels', {})
@@ -261,24 +246,16 @@ class Model:
     @staticmethod
     def model_identifier_valid(model_identifier: str, output_manager: system.OutputManager) -> bool:
         if model_identifier not in MODEL_METADATA:
-            output_manager.message("No valid model selected.", style="error", icon=":cross_mark:", emphasis=True)
+            output_manager.err("No valid model selected")
             return False
 
         model_information = MODEL_METADATA[model_identifier]
         if KEY_URL not in model_information or KEY_FOLDER_NAME not in model_information or KEY_LIMIT_FOV not in model_information:
-            output_manager.message(
-                "One or more of the required keys url, folder_name, limit_fov are missing.",
-                style="error",
-                icon=":cross_mark:",
-            )
+            output_manager.err("Required keys url, folder_name, limit_fov missing")
             return False
 
         if model_information[KEY_URL] == "" or model_information[KEY_FOLDER_NAME] == "" or (model_information[KEY_LIMIT_FOV] is not None and not isinstance(model_information[KEY_LIMIT_FOV], dict)):
-            output_manager.message(
-                "One or more of the required keys url, folder_name, limit_fov are not defined correctly.",
-                style="error",
-                icon=":cross_mark:",
-            )
+            output_manager.err("Required keys url, folder_name, limit_fov not defined correctly")
             return False
 
         return True

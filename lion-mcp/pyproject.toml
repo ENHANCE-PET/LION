@@ -7,7 +7,7 @@ name = "lion-mcp"
 version = "0.1.0"
 description = "MCP server for organizing DICOM/NIfTI data into LION-compatible structure"
 readme = "README.md"
-license = "GPL-3.0-only"
+license = "Apache-2.0"
 authors = [
     { name = "Lalith Kumar Shiyam Sundar", email = "lalith.shiyamsundar@meduniwien.ac.at" }
 ]

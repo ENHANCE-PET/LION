@@ -100,29 +100,37 @@ ALLOWED_MODALITIES = ['CT', 'PT']
 # Define the name of the temporary folder
 TEMP_FOLDER = 'temp'
 
-# CLI colour palette derived from the shared QIMP CLI style.
+# CLI colour palette - MOSAICX-inspired coral/greige theme
+# Warm, distinctive colors visible on both light and dark terminals
+CORAL = "#E87461"
+GREIGE = "#B5A89A"
+
 CLI_COLORS = {
-    "primary": "#ff79c6",
-    "secondary": "#4163ca",
-    "success": "#34c658",
-    "warning": "#f0c37b",
-    "error": "#eb7777",
-    "info": "#2b60dc",
-    "accent": "#bd93f9",
-    "muted": "#44475a",
-    "text": "#44475a",
-    "border": "#d795be",
+    "primary": CORAL,
+    "secondary": GREIGE,
+    "success": "#50fa7b",
+    "warning": "#f1fa8c",
+    "error": "#ff5555",
+    "info": CORAL,
+    "accent": CORAL,
+    "muted": "dim",
+    "text": "default",
+    "border": GREIGE,
 }
 
-BANNER_COLORS = [
-    CLI_COLORS["secondary"],
-    CLI_COLORS["primary"],
-]
-
+BANNER_COLORS = [CORAL, GREIGE]
 BANNER_FONT = "block"
+
 TAGLINE = "The New Standard in PET Lesion Segmentation."
-COMMUNITY_STATEMENT = "A part of the ENHANCE.PET initiative. Join us at www.enhance.pet to build the future of PET imaging together."
-MISSION_STATEMENT = ""
+COMMUNITY_STATEMENT = "A part of the ENHANCE.PET initiative · enhance.pet"
+
+# Unicode symbols (no emojis)
+SYMBOL_SUCCESS = "✓"
+SYMBOL_ERROR = "✗"
+SYMBOL_WARNING = "!"
+SYMBOL_INFO = "›"
+SYMBOL_BULLET = "·"
+SYMBOL_ARROW = "▸"
 
 ACCENT_LINE_GLYPH = "─"
 ACCENT_LINE_MIN_WIDTH = 12

@@ -15,7 +15,6 @@ import logging
 import os
 from typing import List
 
-import emoji
 from rich.console import Console
 from rich.text import Text
 
@@ -101,7 +100,7 @@ def validate_model_name(model_name: str) -> bool:
 def print_error(message: str):
     """Prints an error message with standard formatting."""
     text = Text()
-    text.append(f"{emoji.emojize(':cross_mark:')} ", style=constants.CLI_COLORS["error"])
+    text.append(f"{constants.SYMBOL_ERROR} ", style=constants.CLI_COLORS["error"])
     text.append(message, style=f"bold {constants.CLI_COLORS['error']}")
     ERROR_CONSOLE.print(text)
 

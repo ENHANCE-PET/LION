@@ -68,13 +68,11 @@ import time
 from datetime import datetime
 
 import colorama
-import emoji
 import rich_click as click
 import rich_click
 import SimpleITK
 import multiprocessing as mp
 import concurrent.futures
-from rich.text import Text
 
 rich_click.USE_MARKDOWN = False
 rich_click.SHOW_ARGUMENTS = True
@@ -91,6 +89,7 @@ from lionz import system
 from lionz import models
 from lionz import predict
 from lionz import telemetry
+from lionz import cli_theme as theme
 from lionz.models import (
     AVAILABLE_MODELS,
     MODEL_METADATA,
@@ -124,7 +123,6 @@ def execute_cli(
 
     output_manager = system.OutputManager(verbose_console, verbose_log)
     output_manager.display_logo()
-    print('')
     output_manager.display_citation()
 
     parent_folder = os.path.abspath(main_directory)
@@ -150,62 +148,33 @@ def execute_cli(
     output_manager.log_update('- Model name: ' + selected_model)
     output_manager.log_update(' ')
 
+    # Display configuration using theme
     model_identifiers = selected_model if isinstance(selected_model, list) else [selected_model]
-    note_text = Text(justify="left")
-    for index, model_identifier in enumerate(model_identifiers):
+    for model_identifier in model_identifiers:
         metadata = MODEL_METADATA.get(model_identifier, {})
-        imaging_type = metadata.get(KEY_IMAGING_TYPE, "clin").title()
-        modality_label = metadata.get(KEY_MODALITY, "PT")
-        required_modalities = metadata.get(KEY_REQUIRED_MODALITIES) or [modality_label]
-        required_prefixes = metadata.get(KEY_REQUIRED_PREFIXES) or [modality_label.replace('-', '_') + "_"]
         training_count = metadata.get(KEY_NR_TRAINING, "Not available")
 
-        if index:
-            note_text.append("\n", style=constants.CLI_COLORS["muted"])
+        # Format with reverse highlight like MOSAICX chonk/smol style
+        output_manager.console.print()  # vertical space
 
-        note_text.append("Model Name: ", style=constants.CLI_COLORS["accent"])
-        note_text.append(f"{model_identifier}\n", style=constants.CLI_COLORS["text"])
-        note_text.append("Imaging Type: ", style=constants.CLI_COLORS["accent"])
-        note_text.append(f"{imaging_type}\n", style=constants.CLI_COLORS["text"])
-        note_text.append("Required Modality: ", style=constants.CLI_COLORS["accent"])
-        note_text.append(f"{', '.join(required_modalities)}\n", style=constants.CLI_COLORS["text"])
-        note_text.append("Required Prefix (non-DICOM images): ", style=constants.CLI_COLORS["accent"])
-        note_text.append(f"{', '.join(required_prefixes)}\n", style=constants.CLI_COLORS["text"])
-        note_text.append("Training Datasets: ", style=constants.CLI_COLORS["accent"])
-        note_text.append(f"{training_count}", style=constants.CLI_COLORS["text"])
-
-    note_text.append("\n\n", style=constants.CLI_COLORS["muted"])
-    note_text.append(
-        emoji.emojize("⚠️  Subjects that don't have the required modalities (check file prefix) will be skipped."),
-        style=constants.CLI_COLORS["warning"],
-    )
-    note_text.append("\n", style=constants.CLI_COLORS["muted"])
-
-    if accelerator == "mps":
-        device_line = "🍎 Apple MPS backend is available. Predictions will be run on Apple Silicon GPU."
-    elif accelerator == "cuda":
-        if device_count:
-            device_line = emoji.emojize(
-                f":high_voltage: CUDA is available with {device_count} GPU(s). Predictions will be run on GPU."
-            )
+        # Build device info
+        if accelerator == "mps":
+            device_part = f"[reverse {theme.CORAL}] Device [/reverse {theme.CORAL}] [{theme.MUTED}]▸[/{theme.MUTED}] [{theme.CORAL}]MPS[/{theme.CORAL}]"
+        elif accelerator == "cuda":
+            device_part = f"[reverse {theme.CORAL}] Device [/reverse {theme.CORAL}] [{theme.MUTED}]▸[/{theme.MUTED}] [{theme.CORAL}]CUDA[/{theme.CORAL}]"
         else:
-            device_line = emoji.emojize(
-                ":high_voltage: CUDA is available. Predictions will be run on GPU."
-            )
-    else:
-        device_line = emoji.emojize(
-            ":gear: CUDA/MPS not available. Predictions will be run on CPU."
+            device_part = f"[reverse {theme.CORAL}] Device [/reverse {theme.CORAL}] [{theme.MUTED}]▸[/{theme.MUTED}] [{theme.CORAL}]CPU[/{theme.CORAL}]"
+
+        # Tracer and Device on same line
+        output_manager.console.print(
+            f"  [reverse {theme.CORAL}] Tracer [/reverse {theme.CORAL}] [{theme.MUTED}]▸[/{theme.MUTED}] [{theme.CORAL}]{model_identifier.upper()}[/{theme.CORAL}] [{theme.MUTED}]· {training_count} subjects[/{theme.MUTED}]    {device_part}"
         )
-
-    note_text.append(device_line, style=constants.CLI_COLORS["warning"])
-
-    output_manager.context_panel("Note", note_text, icon=":memo:")
 
     # ------------------------------
     # DOWNLOAD THE MODEL
     # ------------------------------
 
-    output_manager.section("Model Download", ":globe_with_meridians:")
+    output_manager.section("Model Download")
     model_path = system.MODELS_DIRECTORY_PATH
     file_utilities.create_directory(model_path)
     model_routine = models.construct_model_routine(selected_model, output_manager)
@@ -222,23 +191,19 @@ def execute_cli(
         output_manager.log_update(f"Input validation successful.")
 
     if lion_instances is not None:
-        output_manager.message(
-            f"Number of LION instances run in parallel: {lion_instances}",
-            style="accent",
-            icon=" :lion_face:",
-        )
+        output_manager.info(f"Parallel processing: {lion_instances} instances")
 
 
     # ------------------------------
     # INPUT STANDARDIZATION
     # ------------------------------
     output_manager.console.print()
-    output_manager.section("Standardizing input data to NIfTI", ":magnifying_glass_tilted_left:")
+    output_manager.section("Input Standardization")
     output_manager.log_update(' ')
     output_manager.log_update(' STANDARDIZING INPUT DATA TO NIFTI:')
     output_manager.log_update(' ')
     image_conversion.standardize_to_nifti(parent_folder, output_manager)
-    output_manager.message(" Standardization complete.", style="success")
+    output_manager.ok("Standardization complete")
     output_manager.log_update(" Standardization complete.")
 
     # ------------------------------
@@ -264,44 +229,24 @@ def execute_cli(
 
     for skipped_subject in skipped_subjects:
         subject_name = os.path.basename(skipped_subject)
-        message = (
-            f"No files matching the expected prefix 'PT_' or 'PT-' were found for subject {subject_name}. "
-            "Skipping this subject."
-        )
-        output_manager.message(message, style="warning", icon=":warning:")
+        message = f"No PT files for {subject_name}, skipping"
+        output_manager.warn(message)
         output_manager.log_update(f"   X {message}")
 
     if prediction_subjects:
-        queued_text = Text(
-            " Subjects queued for prediction: ",
-            style=f"italic {constants.CLI_COLORS['info']}"
-        )
-        queued_text.append(
-            str(len(prediction_subjects)),
-            style=f"bold {constants.CLI_COLORS['accent']}"
-        )
-        output_manager.console.print(queued_text)
+        output_manager.info(f"Subjects queued: {len(prediction_subjects)}")
 
     num_subjects = len(prediction_subjects)
     if num_subjects < 1:
-        output_manager.message(
-            "No LION compliant subject found to continue!",
-            style="error",
-            icon=" :cross_mark:",
-            emphasis=True,
-        )
-        output_manager.message(
-            "See: https://github.com/LalithShiyam/LION#directory-conventions-for-lion-%EF%B8%8F",
-            style="info",
-            icon=" :light_bulb:",
-        )
+        output_manager.err("No LION compliant subjects found")
+        output_manager.info("See: https://github.com/LalithShiyam/LION#input-data-structure")
         return
 
     # -------------------------------------------------
     # RUN PREDICTION ONLY FOR LION COMPLIANT SUBJECTS
     # -------------------------------------------------
     output_manager.console.print()
-    output_manager.section("Prediction", ":crystal_ball:")
+    output_manager.section("Prediction")
     output_manager.log_update(' ')
     output_manager.log_update(' PERFORMING PREDICTION:')
     output_manager.log_update(' ')
@@ -650,11 +595,8 @@ def lion_subject(subject: str, subject_index: int, number_of_subjects: int, mode
             break
 
     if not modality_files:
-        message = (
-            f"No files matching the expected prefix 'PT_' or 'PT-' were found for subject {subject_name}. "
-            "Skipping this subject."
-        )
-        output_manager.message(message, style="warning", icon=":warning:")
+        message = f"No PT files found for subject {subject_name}, skipping"
+        output_manager.warn(message)
         output_manager.log_update(f"   X {message}")
         return subject_peak_performance
 
