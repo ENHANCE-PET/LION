@@ -29,7 +29,7 @@ dependencies = [
     "halo",
     "pandas",
     "SimpleITK",
-    "pydicom~=2.2.2",
+    "pydicom",
     "imageio",
     "numpy",
     "matplotlib",
@@ -41,7 +41,7 @@ dependencies = [
     "colorama",
     "dask",
     "rich",
-    "dicom2nifti~=2.4.8",
+    "dicom2nifti",
     "emoji",
     "dask[distributed]",
     "opencv-python"
