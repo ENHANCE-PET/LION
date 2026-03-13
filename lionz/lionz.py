@@ -115,7 +115,6 @@ def execute_model_download(
     output_manager.display_logo()
     output_manager.display_citation()
 
-    output_manager.console.print()
     theme.section("Model Download", output_manager.console, number="01")
 
     # Determine output path
@@ -234,7 +233,6 @@ def execute_cli(
     # ------------------------------
     # INPUT STANDARDIZATION
     # ------------------------------
-    output_manager.console.print()
     output_manager.section("Input Standardization")
     output_manager.log_update(' ')
     output_manager.log_update(' STANDARDIZING INPUT DATA TO NIFTI:')
@@ -282,7 +280,6 @@ def execute_cli(
     # -------------------------------------------------
     # RUN PREDICTION ONLY FOR LION COMPLIANT SUBJECTS
     # -------------------------------------------------
-    output_manager.console.print()
     output_manager.section("Prediction")
     output_manager.log_update(' ')
     output_manager.log_update(' PERFORMING PREDICTION:')

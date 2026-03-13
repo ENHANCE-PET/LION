@@ -174,8 +174,8 @@ class LiveSpinner:
         self.text = ""
         self.running = False
         self.thread = None
-        # Braille spinner frames
-        self._frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        # Spark ignite spinner frames
+        self._frames = ["⋅", "+", "✳", "+", "⋅"]
         # RGB colors for gradient interpolation
         self._coral = (232, 116, 97)
         self._greige = (181, 168, 154)
@@ -207,6 +207,7 @@ class LiveSpinner:
         import time
         import sys
         import math
+        import os
 
         # Try to get unbuffered tty output
         try:
@@ -214,11 +215,21 @@ class LiveSpinner:
         except OSError:
             tty = sys.stderr
 
-        wave_width = 12  # Width of the traveling highlight
+        wave_width = 32  # Width of the traveling highlight
 
         while self.running:
             frame = self._frames[self._frame_idx % len(self._frames)]
             text = self.text
+
+            # Truncate text to fit terminal width (prefix: "  X " = 4 chars)
+            try:
+                cols = os.get_terminal_size().columns
+            except OSError:
+                cols = 80
+            max_text = cols - 4
+            if len(text) > max_text:
+                text = text[: max_text - 1] + "…"
+
             text_len = len(text) if text else 1
 
             # Build colored text with traveling wave
@@ -240,8 +251,8 @@ class LiveSpinner:
             tty.flush()
 
             self._frame_idx += 1
-            self._wave_pos += 1
-            time.sleep(0.06)
+            self._wave_pos += 3
+            time.sleep(0.18)
 
         if tty not in (sys.stderr, sys.stdout):
             tty.close()

@@ -16,6 +16,10 @@
 ## Quick Start
 
 ```bash
+python -m venv lion-env
+source lion-env/bin/activate        # macOS / Linux
+lion-env\Scripts\activate           # Windows
+
 pip install git+https://github.com/ENHANCE-PET/LION.git
 lionz -d /path/to/data -m fdg
 ```
@@ -30,16 +34,54 @@ That's it. Models download automatically on first run.
 
 ## Installation
 
-**From GitHub (recommended)**
+> **We recommend installing LION in a virtual environment to avoid dependency conflicts.**
+
+### Using uv (recommended)
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package manager that handles virtual environments automatically.
+
 ```bash
-pip install git+https://github.com/ENHANCE-PET/LION.git
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS/Linux
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
 ```
 
-**From source with uv**
+**Install from GitHub:**
+```bash
+uv venv lion-env
+```
+
+```bash
+# Activate the environment
+source lion-env/bin/activate        # macOS / Linux
+lion-env\Scripts\activate           # Windows
+```
+
+```bash
+uv pip install git+https://github.com/ENHANCE-PET/LION.git
+```
+
+**Install from source:**
 ```bash
 git clone https://github.com/ENHANCE-PET/LION.git
 cd LION
 uv sync
+```
+
+### Using pip + venv
+
+```bash
+python -m venv lion-env
+```
+
+```bash
+# Activate the environment
+source lion-env/bin/activate        # macOS / Linux
+lion-env\Scripts\activate           # Windows
+```
+
+```bash
+pip install git+https://github.com/ENHANCE-PET/LION.git
 ```
 
 ## Input Data Structure
