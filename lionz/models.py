@@ -35,7 +35,7 @@ MODEL_METADATA = {
         KEY_NR_TRAINING: TRAINING_DATASET_SIZE_PSMA,
     },
     "fdg": {
-        KEY_URL: "https://github.com/ENHANCE-PET/LION/releases/download/lionz-v.1.0.0/clin_pt_fdg_5235_17122025.zip",
+        KEY_URL: "https://github.com/ENHANCE-PET/LION/releases/download/lionz-v.1.0.3/clin_pt_fdg_5209_27032026.zip",
         KEY_FOLDER_NAME: "Dataset789_Tumors",
         TUMOR_LABEL: 11,
         KEY_IMAGING_TYPE: "clinical",
