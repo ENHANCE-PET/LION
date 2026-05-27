@@ -20,7 +20,7 @@ python -m venv lion-env
 source lion-env/bin/activate        # macOS / Linux
 lion-env\Scripts\activate           # Windows
 
-pip install git+https://github.com/ENHANCE-PET/LION.git
+pip install lionz
 lionz -d /path/to/data -m fdg
 ```
 
@@ -46,7 +46,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS/Linux
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
 ```
 
-**Install from GitHub:**
+**Install from PyPI:**
 ```bash
 uv venv lion-env
 ```
@@ -58,7 +58,7 @@ lion-env\Scripts\activate           # Windows
 ```
 
 ```bash
-uv pip install git+https://github.com/ENHANCE-PET/LION.git
+uv pip install lionz
 ```
 
 **Install from source:**
@@ -81,7 +81,7 @@ lion-env\Scripts\activate           # Windows
 ```
 
 ```bash
-pip install git+https://github.com/ENHANCE-PET/LION.git
+python -m pip install lionz
 ```
 
 ## Input Data Structure
