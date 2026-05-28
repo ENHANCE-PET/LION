@@ -86,23 +86,24 @@ python -m pip install lionz
 
 ## Input Data Structure
 
+LION runs on PET input only. CT is not required for the current FDG and PSMA models.
+
 ```
 data/
 ├── patient_001/
-│   └── PT_scan.nii.gz      # PET file with PT_ prefix
+│   └── PT_scan.nii.gz      # PET file with PT_ or PT- prefix
 ├── patient_002/
 │   └── PT_scan.nii.gz
 └── patient_003/
-    ├── PT_scan.nii.gz
-    └── CT_scan.nii.gz      # CT optional, needs CT_ prefix
+    └── PT_scan.nii.gz
 ```
 
 **Rules:**
 - One folder per subject
-- PET files must start with `PT_`
-- CT files must start with `CT_` (optional)
+- PET files must start with `PT_` or `PT-`
+- CT files are not needed and are ignored by the current segmentation models
 - Supports `.nii` and `.nii.gz`
-- DICOM folders also supported (modality auto-detected from tags)
+- PET DICOM folders are also supported; modality is auto-detected from tags
 
 ### Messy Data?
 
@@ -158,7 +159,7 @@ seg = lionz.lion((array, spacing), 'fdg')  # Returns np.ndarray
 
 # With options
 result = lionz.lion(
-    '/path/to/scan.nii.gz',
+    '/path/to/PT_scan.nii.gz',
     'fdg',
     output_dir='/path/to/output',
     accelerator='mps',  # 'cpu', 'cuda', or 'mps'
@@ -172,7 +173,7 @@ result = lionz.lion(
 import lionz
 
 if __name__ == '__main__':
-    lionz.lion('/path/to/scan.nii.gz', 'fdg')
+    lionz.lion('/path/to/PT_scan.nii.gz', 'fdg')
 ```
 
 ## Models
@@ -186,7 +187,7 @@ if __name__ == '__main__':
 
 ```
 patient_001/
-├── PT_scan.nii.gz                    # Original input
+├── PT_scan.nii.gz                    # Original PET input
 └── lionz-2024-01-15-10-30-00/
     ├── segmentations/
     │   ├── PT_scan_tumor_seg.nii.gz  # Tumor mask
