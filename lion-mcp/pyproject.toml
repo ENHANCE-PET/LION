@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=1.0.0",
-    "pydicom>=2.2.0",
+    "pydicom>=2.4.5",
     "nibabel>=5.0.0",
     "numpy<2.0",
 ]
