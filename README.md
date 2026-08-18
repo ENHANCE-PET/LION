@@ -253,7 +253,7 @@ DOI: 10.5281/zenodo.12626789
 
 ## License
 
-Apache 2.0. For enterprise integrations, contact [Zenta](mailto:lalith@zenta.solutions).
+Apache 2.0. 
 
 ## Contributors
 
