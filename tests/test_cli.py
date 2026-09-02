@@ -8,7 +8,7 @@ def test_cli_rejects_a_missing_input_before_runtime_initialization(
     tmp_path,
     monkeypatch,
 ):
-    missing_directory = tmp_path / "missing-input"
+    missing_directory = tmp_path / f"missing-input-{'x' * 120}"
 
     def fail_if_called(*args, **kwargs):
         pytest.fail("runtime initialization must not run for an invalid input path")
@@ -19,9 +19,11 @@ def test_cli_rejects_a_missing_input_before_runtime_initialization(
     result = CliRunner().invoke(
         lionz_cli.main,
         ["-d", str(missing_directory), "-m", "psma"],
+        color=True,
+        terminal_width=80,
     )
 
     assert result.exit_code == 2
-    assert missing_directory.name in result.output
+    assert "does not exist" in result.output
     assert "Invalid value for '-d' / '--main-directory'" in result.output
     assert list(tmp_path.rglob("*.log")) == []
