@@ -28,6 +28,10 @@ RUN test "$(uv version --short)" = "${LIONZ_VERSION}" \
 COPY lionz ./lionz
 RUN uv sync --locked --no-dev --no-editable --no-cache
 
+# Singularity runs immutable SIF images, so install nnUNet extensions while the
+# Docker layer is writable instead of modifying site-packages at inference time.
+RUN python -c 'from lionz.nnUNet_custom_trainer.utility import add_custom_trainers_to_local_nnunetv2; status = add_custom_trainers_to_local_nnunetv2(); print(status); from nnunetv2.training.nnUNetTrainer.variants.LION_custom_trainers import nnUNetTrainerDA5_2000epochs; assert nnUNetTrainerDA5_2000epochs.__name__ == "nnUNetTrainerDA5_2000epochs"'
+
 # Fail the image build if dependency resolution drifts from the supported GPU ABI.
 COPY docker/verify_runtime.py /tmp/verify_runtime.py
 RUN python /tmp/verify_runtime.py && rm /tmp/verify_runtime.py
