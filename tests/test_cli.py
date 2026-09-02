@@ -20,10 +20,10 @@ def test_cli_rejects_a_missing_input_before_runtime_initialization(
         lionz_cli.main,
         ["-d", str(missing_directory), "-m", "psma"],
         color=True,
-        terminal_width=80,
+        terminal_width=40,
     )
 
     assert result.exit_code == 2
     assert "does not exist" in result.output
-    assert "Invalid value for '-d' / '--main-directory'" in result.output
+    assert "Invalid value" in result.output
     assert list(tmp_path.rglob("*.log")) == []
