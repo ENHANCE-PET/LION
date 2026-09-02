@@ -2,6 +2,7 @@
 FROM python:3.10.20-slim-trixie@sha256:63669fd2563fa90b0442fa7b568e66e3667755636cda086d7bcaaa895f66fe39
 
 ARG LIONZ_VERSION=1.0.5
+ARG LIONZ_REVISION=unknown
 
 ENV UV_PROJECT_ENVIRONMENT=/opt/lionz \
     UV_LINK_MODE=copy \
@@ -31,7 +32,9 @@ RUN uv sync --locked --no-dev --no-editable --no-cache
 COPY docker/verify_runtime.py /tmp/verify_runtime.py
 RUN python /tmp/verify_runtime.py && rm /tmp/verify_runtime.py
 
-LABEL org.opencontainers.image.version="${LIONZ_VERSION}"
+LABEL org.opencontainers.image.version="${LIONZ_VERSION}" \
+    org.opencontainers.image.source="https://github.com/ENHANCE-PET/LION" \
+    org.opencontainers.image.revision="${LIONZ_REVISION}"
 
 ENTRYPOINT ["lionz"]
 CMD ["-h"]

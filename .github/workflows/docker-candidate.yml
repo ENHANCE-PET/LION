@@ -3,21 +3,13 @@ name: Build Docker Candidate
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Immutable Git tag to build, for example lionz-v.1.0.5"
-        required: true
-        type: string
       version:
         description: "LION version, for example 1.0.5"
         required: true
         type: string
-      candidate_tag:
-        description: "Docker candidate tag, for example 1.0.5-rc1"
-        required: true
-        type: string
 
 concurrency:
-  group: docker-candidate-${{ inputs.candidate_tag }}
+  group: docker-candidate-${{ inputs.version }}
   cancel-in-progress: false
 
 permissions:
@@ -31,7 +23,8 @@ jobs:
       - name: Checkout immutable release source
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref }}
+          ref: lionz-v.${{ inputs.version }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,15 +34,26 @@ jobs:
       - name: Install uv
         run: python -m pip install "uv==0.9.22"
 
-      - name: Validate candidate metadata
+      - name: Validate release source and derive candidate metadata
+        id: meta
         env:
           LIONZ_VERSION: ${{ inputs.version }}
-          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$LIONZ_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+
+          expected_tag="lionz-v.${LIONZ_VERSION}"
+          expected_commit="$(git rev-parse "refs/tags/${expected_tag}^{commit}")"
+          actual_commit="$(git rev-parse HEAD)"
+          test "$actual_commit" = "$expected_commit"
           test "$(uv version --short)" = "$LIONZ_VERSION"
-          [[ "$CANDIDATE_TAG" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]
+
+          candidate_tag="${LIONZ_VERSION}-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "candidate_tag=$candidate_tag"
+            echo "revision=$actual_commit"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Run locked test suite
         run: |
@@ -75,12 +79,23 @@ jobs:
           push: true
           build-args: |
             LIONZ_VERSION=${{ inputs.version }}
-          tags: ${{ secrets.DOCKER_USERNAME }}/lionz:${{ inputs.candidate_tag }}
+            LIONZ_REVISION=${{ steps.meta.outputs.revision }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/lionz:${{ steps.meta.outputs.candidate_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
 
-      - name: Record candidate digest
+      - name: Record candidate identity
         env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          CANDIDATE_TAG: ${{ steps.meta.outputs.candidate_tag }}
           CANDIDATE_DIGEST: ${{ steps.build.outputs.digest }}
+          LIONZ_REVISION: ${{ steps.meta.outputs.revision }}
         run: |
-          echo "Candidate digest: $CANDIDATE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Candidate: $DOCKER_USERNAME/lionz:$CANDIDATE_TAG"
+            echo "Digest: $CANDIDATE_DIGEST"
+            echo "Revision: $LIONZ_REVISION"
+            echo "LMU-test this exact reference: $DOCKER_USERNAME/lionz@$CANDIDATE_DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"

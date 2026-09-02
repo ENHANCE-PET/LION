@@ -1,18 +1,27 @@
+import pytest
 from click.testing import CliRunner
 
-from lionz.lionz import main
+import lionz.lionz as lionz_cli
 
 
-def test_cli_rejects_a_missing_input_directory(tmp_path):
+def test_cli_rejects_a_missing_input_before_runtime_initialization(
+    tmp_path,
+    monkeypatch,
+):
     missing_directory = tmp_path / "missing-input"
 
+    def fail_if_called(*args, **kwargs):
+        pytest.fail("runtime initialization must not run for an invalid input path")
+
+    monkeypatch.setattr(lionz_cli, "execute_cli", fail_if_called)
+    monkeypatch.setattr(lionz_cli.system, "check_device", fail_if_called)
+
     result = CliRunner().invoke(
-        main,
+        lionz_cli.main,
         ["-d", str(missing_directory), "-m", "psma"],
     )
 
     assert result.exit_code == 2
     assert missing_directory.name in result.output
     assert "Invalid value for '-d' / '--main-directory'" in result.output
-    assert "CUDA initialization" not in result.output
-    assert "lionz-v1.0.5_" not in result.output
+    assert list(tmp_path.rglob("*.log")) == []
