@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.worktrees
+__pycache__
+*.pyc
+*.log
+build
+dist
+docs
+lion-video
+lion-mcp
+tests
+Images

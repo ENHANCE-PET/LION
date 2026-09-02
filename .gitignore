@@ -40,6 +40,7 @@ htmlcov/
 # IDE / editor state
 .vscode/
 .idea/
+.worktrees/
 *.swp
 *.swo
 

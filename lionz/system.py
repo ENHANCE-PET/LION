@@ -220,4 +220,7 @@ def check_device(
 
 
 ENVIRONMENT_ROOT_PATH: str = get_virtual_env_root()
-MODELS_DIRECTORY_PATH: str = os.path.join(ENVIRONMENT_ROOT_PATH, "models", "nnunet_trained_models")
+MODELS_DIRECTORY_PATH: str = os.environ.get(
+    "LIONZ_MODELS_DIRECTORY",
+    os.path.join(ENVIRONMENT_ROOT_PATH, "models", "nnunet_trained_models"),
+)

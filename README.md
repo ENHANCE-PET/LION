@@ -84,6 +84,34 @@ lion-env\Scripts\activate           # Windows
 python -m pip install lionz
 ```
 
+### Docker with NVIDIA GPUs
+
+The LION Docker image targets CUDA 12.4 and requires NVIDIA driver
+550.54.14 or newer on Linux. The host supplies the NVIDIA driver; it is not
+installed inside the container.
+
+```bash
+docker run --rm --gpus all --shm-size=2g \
+  -v /path/to/data:/shared \
+  -v lionz-models:/usr/local/models \
+  lalithshiyam/lionz:1.0.5 \
+  -d /shared -m psma
+```
+
+LION stores downloaded models under
+`/usr/local/models/nnunet_trained_models`, so the model volume persists across
+container runs.
+
+On a Slurm cluster with Singularity:
+
+```bash
+singularity exec --nv \
+  --bind /path/to/data:/shared \
+  --bind /path/to/models:/usr/local/models \
+  docker://lalithshiyam/lionz:1.0.5 \
+  lionz -d /shared -m psma
+```
+
 ## Input Data Structure
 
 LION runs on PET input only. CT is not required for the current FDG and PSMA models.

@@ -1,0 +1,144 @@
+name: Promote Tested Docker Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Stable LION version, for example 1.0.5"
+        required: true
+        type: string
+      candidate_tag:
+        description: "Candidate tag produced by the build workflow"
+        required: true
+        type: string
+      candidate_digest:
+        description: "LMU-tested Docker digest, including sha256:"
+        required: true
+        type: string
+
+concurrency:
+  group: docker-promote-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: dockerhub-production
+
+    steps:
+      - name: Checkout immutable release source
+        uses: actions/checkout@v5
+        with:
+          ref: lionz-v.${{ inputs.version }}
+          fetch-depth: 0
+
+      - name: Validate promotion inputs
+        env:
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$LIONZ_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$CANDIDATE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+          expected_prefix="${LIONZ_VERSION}-candidate-"
+          [[ "$CANDIDATE_TAG" == "$expected_prefix"* ]]
+          candidate_suffix="${CANDIDATE_TAG#"$expected_prefix"}"
+          [[ "$candidate_suffix" =~ ^[0-9]+-[0-9]+$ ]]
+
+      - name: Verify stable package exists on PyPI
+        env:
+          LIONZ_VERSION: ${{ inputs.version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          version = os.environ["LIONZ_VERSION"]
+          with urllib.request.urlopen("https://pypi.org/pypi/lionz/json", timeout=20) as response:
+              releases = json.load(response).get("releases", {})
+          if not releases.get(version):
+              raise SystemExit(f"PyPI does not contain lionz {version}")
+          PY
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Verify the tested candidate identity
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$DOCKER_USERNAME/lionz"
+          tagged_candidate="$image:$CANDIDATE_TAG"
+          source="$image@$CANDIDATE_DIGEST"
+
+          tag_digest="$(docker buildx imagetools inspect "$tagged_candidate" | awk '/^Digest:/ { print $2; exit }')"
+          test "$tag_digest" = "$CANDIDATE_DIGEST"
+
+          docker pull --platform linux/amd64 "$source"
+          expected_revision="$(git rev-parse HEAD)"
+          actual_version="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$source")"
+          actual_revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$source")"
+          actual_source="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$source")"
+          actual_architecture="$(docker image inspect --format '{{ .Architecture }}' "$source")"
+
+          test "$actual_version" = "$LIONZ_VERSION"
+          test "$actual_revision" = "$expected_revision"
+          test "$actual_source" = "https://github.com/ENHANCE-PET/LION"
+          test "$actual_architecture" = "amd64"
+
+          docker run --rm --platform linux/amd64 \
+            --entrypoint python \
+            --env EXPECTED_LIONZ_VERSION="$LIONZ_VERSION" \
+            "$source" \
+            -c 'import importlib.metadata as metadata, os, torch; assert metadata.version("lionz") == os.environ["EXPECTED_LIONZ_VERSION"]; assert torch.__version__.split("+", 1)[0] == "2.6.0"; assert torch.version.cuda == "12.4"'
+
+      - name: Promote the tested digest without rebuilding
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$DOCKER_USERNAME/lionz"
+          source="$image@$CANDIDATE_DIGEST"
+          docker buildx imagetools create \
+            --tag "$image:$LIONZ_VERSION" \
+            --tag "$image:v$LIONZ_VERSION" \
+            --tag "$image:latest" \
+            "$source"
+
+          for tag in "$LIONZ_VERSION" "v$LIONZ_VERSION" latest; do
+            promoted_digest="$(docker buildx imagetools inspect "$image:$tag" | awk '/^Digest:/ { print $2; exit }')"
+            test "$promoted_digest" = "$CANDIDATE_DIGEST"
+          done
+
+      - name: Record promoted digest
+        env:
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        run: |
+          {
+            echo "Promoted LION $LIONZ_VERSION"
+            echo "Candidate tag: $CANDIDATE_TAG"
+            echo "Digest: $CANDIDATE_DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"
