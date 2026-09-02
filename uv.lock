@@ -456,7 +456,7 @@ distributed = [
 
 [[package]]
 name = "dicom2nifti"
-version = "2.4.11"
+version = "2.6.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nibabel" },
@@ -466,9 +466,9 @@ dependencies = [
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/24/0c/b28033fa5bea356412e2732cd70cddd4a6218f8b0a3474f21fc14f5efb1a/dicom2nifti-2.4.11.tar.gz", hash = "sha256:971f21cbdb9a2e16bdfdec5953d8377e149161a8d78af9e128078a4ef435f859", size = 43036, upload-time = "2024-05-08T07:09:17.213Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/3a/88d1339ccdf51d2547d4b4b9f511d8a80be989961878b3773fd2a4396c88/dicom2nifti-2.6.2.tar.gz", hash = "sha256:2a421efeacf1616a932f41047e588477b5de72fd2d90aa15b49dcc8f1e4ea544", size = 43193, upload-time = "2025-06-23T06:39:50.267Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/4c/67087bd6671e45638e177f43d81c08dbcb82969baa314f0c11ad10a4e68c/dicom2nifti-2.4.11-py3-none-any.whl", hash = "sha256:013bbc832b071aa6d7b6b57b5377b95dbe790b1e6891fb4845e7b2e8fc8be227", size = 43554, upload-time = "2024-05-08T07:09:15.382Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/59/598237cb4a5b1fae3515ad8b402ae815a5551e236e530ba11b7a17b2c036/dicom2nifti-2.6.2-py3-none-any.whl", hash = "sha256:d2a328ac534cd424236660d3df1ad01c6fbd71587c620e93041d9ff07dceef4b", size = 43717, upload-time = "2025-06-23T06:39:48.871Z" },
 ]
 
 [[package]]
@@ -1015,7 +1015,7 @@ requires-dist = [
     { name = "cfonts" },
     { name = "colorama" },
     { name = "dask", extras = ["distributed"], specifier = ">=2026.1.0" },
-    { name = "dicom2nifti" },
+    { name = "dicom2nifti", specifier = ">=2.6.2" },
     { name = "emoji" },
     { name = "halo" },
     { name = "imageio" },

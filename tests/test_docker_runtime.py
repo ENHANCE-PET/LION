@@ -3,11 +3,19 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from packaging.version import Version
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR_PATH = PROJECT_ROOT / "docker" / "verify_runtime.py"
 DOCKERFILE_PATH = PROJECT_ROOT / "Dockerfile"
+PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
+UV_LOCK_PATH = PROJECT_ROOT / "uv.lock"
 
 
 def load_runtime_validator():
@@ -61,3 +69,15 @@ def test_docker_image_installs_custom_trainer_before_runtime_verification():
     assert installer in dockerfile
     assert installed_import in dockerfile
     assert dockerfile.index(installer) < dockerfile.index(runtime_verification)
+
+
+def test_locked_dicom_converter_supports_pydicom_3():
+    pyproject = tomllib.loads(PYPROJECT_PATH.read_text())
+    dependencies = pyproject["project"]["dependencies"]
+    assert "dicom2nifti>=2.6.2" in dependencies
+
+    lockfile = tomllib.loads(UV_LOCK_PATH.read_text())
+    locked_package = next(
+        package for package in lockfile["package"] if package["name"] == "dicom2nifti"
+    )
+    assert Version(locked_package["version"]) >= Version("2.6.2")
