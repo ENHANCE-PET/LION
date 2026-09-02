@@ -52,7 +52,7 @@ download : Handles downloading of data, models, or other necessary resources.
 
 __author__ = "Lalith kumar shiyam sundar, Sebastian Gutschmayer, Manuel pires"
 __email__ = "lalith.shiyamsundar@meduniwien.ac.at, sebastian.gutschmayer@meduniwien.ac.at, manuel.pires@meduniwien.ac.at"
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 
 # Imports for the module
 import os
@@ -375,7 +375,14 @@ def execute_cli(
     "-d",
     "--main-directory",
     "main_directory",
-    type=click.Path(path_type=str),
+    type=click.Path(
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+        path_type=str,
+    ),
     required=False,
     default=None,
     metavar="<MAIN_DIRECTORY>",

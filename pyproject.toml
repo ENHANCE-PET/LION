@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lionz"
-version = "1.0.4"
+version = "1.0.5"
 description = "A toolkit for precise segmentation of tumors in PET/CT scans."
 readme = "README.md"
 license = "Apache-2.0"
@@ -44,7 +44,9 @@ dependencies = [
     "dicom2nifti",
     "emoji",
     "requests>=2.33.0",
-    "opencv-python"
+    "opencv-python",
+    "torch==2.6.0",
+    "torchvision==0.21.0"
 ]
 requires-python = ">=3.10"
 license-files = ["LICENSE"]
@@ -57,6 +59,9 @@ Homepage = "https://github.com/ENHANCE-PET/LION"
 "Bug Tracker" = "https://github.com/ENHANCE-PET/LION/issues"
 Documentation = "https://lionz.readthedocs.io/en/latest/"
 Source = "https://github.com/ENHANCE-PET/LION"
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -1,0 +1,87 @@
+name: Promote Tested Docker Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Stable LION version, for example 1.0.5"
+        required: true
+        type: string
+      candidate_digest:
+        description: "LMU-tested Docker digest, including sha256:"
+        required: true
+        type: string
+
+concurrency:
+  group: docker-promote-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate promotion inputs
+        env:
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$LIONZ_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$CANDIDATE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+      - name: Verify stable package exists on PyPI
+        env:
+          LIONZ_VERSION: ${{ inputs.version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          version = os.environ["LIONZ_VERSION"]
+          with urllib.request.urlopen("https://pypi.org/pypi/lionz/json", timeout=20) as response:
+              releases = json.load(response).get("releases", {})
+          if not releases.get(version):
+              raise SystemExit(f"PyPI does not contain lionz {version}")
+          PY
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Promote the tested digest without rebuilding
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$DOCKER_USERNAME/lionz"
+          source="$image@$CANDIDATE_DIGEST"
+          docker buildx imagetools inspect "$source"
+          docker buildx imagetools create \
+            --tag "$image:$LIONZ_VERSION" \
+            --tag "$image:v$LIONZ_VERSION" \
+            --tag "$image:latest" \
+            "$source"
+
+      - name: Record promoted digest
+        env:
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        run: |
+          {
+            echo "Promoted LION $LIONZ_VERSION"
+            echo "Digest: $CANDIDATE_DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"
