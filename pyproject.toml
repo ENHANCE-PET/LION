@@ -41,7 +41,7 @@ dependencies = [
     "colorama",
     "dask[distributed]>=2026.1.0",
     "rich",
-    "dicom2nifti",
+    "dicom2nifti>=2.6.2",
     "emoji",
     "requests>=2.33.0",
     "opencv-python",
