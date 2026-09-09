@@ -206,6 +206,19 @@ def _dicom3tools_command(
     )
 
 
+def _dciodvfy_command(
+    singularity: str,
+    sif: str | Path,
+    input_path: str | Path,
+) -> list[str]:
+    return _dicom3tools_command(
+        singularity,
+        sif,
+        "dciodvfy",
+        input_path,
+    )
+
+
 def _dcmqi_conversion_command(
     singularity: str,
     sif: str | Path,
@@ -370,9 +383,7 @@ def convert_task(
         seg = validate_seg_dataset(temporary_output, source, variant)
         dciodvfy_log = log_dir / f"{patient_id}_{variant}_dciodvfy.log"
         dciodvfy = _run_command(
-            _dicom3tools_command(
-                singularity, dicom3tools_sif, "dciodvfy", "-new", temporary_output
-            ),
+            _dciodvfy_command(singularity, dicom3tools_sif, temporary_output),
             dciodvfy_log,
         )
         dciodvfy_errors = list(parse_dciodvfy(dciodvfy.stdout))
@@ -492,9 +503,7 @@ def validate_existing_task(
     log_dir = Path(task["validator_log_dir"])
     prefix = f"{task['patient_id']}_{task['variant']}_revalidate"
     dciodvfy = _run_command(
-        _dicom3tools_command(
-            singularity, dicom3tools_sif, "dciodvfy", "-new", task["output_path"]
-        ),
+        _dciodvfy_command(singularity, dicom3tools_sif, task["output_path"]),
         log_dir / f"{prefix}_dciodvfy.log",
     )
     dcentvfy = _run_command(
