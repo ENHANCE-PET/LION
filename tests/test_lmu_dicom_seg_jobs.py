@@ -35,6 +35,8 @@ def test_packaging_rechecks_current_artifacts_and_tool_hashes():
     assert "verify-artifacts" in script
     assert "summarize" in script
     assert 'viewer.get("seg_objects"' in script
+    assert 'ohif.get("source_sop_instance_uids")' in script
+    assert 'get("wado_sha256")' in script
 
 
 def test_ohif_smoke_endpoint_is_loopback_only():
@@ -42,6 +44,8 @@ def test_ohif_smoke_endpoint_is_loopback_only():
 
     assert '"127.0.0.1:3001:80"' in compose
     assert '"8042:8042"' not in compose
+    assert "ohif/app:v3.12.15@sha256:" in compose
+    assert "orthancteam/orthanc:26.8.2@sha256:" in compose
 
 
 def test_viewer_validators_bind_evidence_to_seg_hashes_and_commit():
@@ -65,3 +69,13 @@ def test_docker_candidate_smoke_uses_digest_b200_and_real_data():
     assert "Lung_Dx-A0164" in script
     assert 'raw/${PATIENT}/PT' in script
     assert "np.array_equal" in script
+    assert 'if [[ ! -s "${CANDIDATE_SIF}" ]]' not in script
+    assert "singularity pull --disable-cache" in script
+    assert "--containall" in script
+    assert "--cleanenv" in script
+    assert '${LION_MODELS}:/usr/local/models:ro' in script
+    assert '${ROOT}/tmp:/tmp' not in script
+    assert 'org.opencontainers.image.revision' in script
+    assert 'observed_revision' in script
+    assert 'sif_sha256' in script
+    assert 'segmentation_sha256' in script

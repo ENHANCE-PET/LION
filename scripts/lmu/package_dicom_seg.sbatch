@@ -65,12 +65,15 @@ report_count=$(find "${QC_ROOT}/reports" -maxdepth 1 -type f -name '*.json' | wc
 [[ "${suv4_count}" -eq 130 ]]
 [[ "${report_count}" -eq 266 ]]
 
-"${LION_PY}" - "${QC_ROOT}" <<'PY'
+"${LION_PY}" - "${QC_ROOT}" "${ROOT}/raw/Lung_Dx-A0164/PT" <<'PY'
 import json
 import pathlib
 import sys
 
+import pydicom
+
 qc_root = pathlib.Path(sys.argv[1])
+source_dir = pathlib.Path(sys.argv[2])
 summary = json.loads((qc_root / "dicom_seg_validation.json").read_text())
 expected = {
     "status": "ok",
@@ -111,6 +114,15 @@ if ohif.get("status") != "dicomweb_ok_ui_not_exercised":
     raise SystemExit("OHIF DICOMweb validation evidence is missing or inconsistent")
 if ohif.get("instances") != 421 or ohif.get("series") != 3:
     raise SystemExit("OHIF/Orthanc did not expose the complete smoke dataset")
+expected_source_sops = sorted(
+    str(pydicom.dcmread(path, stop_before_pixels=True).SOPInstanceUID)
+    for path in source_dir.rglob("*.dcm")
+)
+if ohif.get("source_sop_instance_uids") != expected_source_sops:
+    raise SystemExit("OHIF QIDO source SOP Instance UID inventory mismatch")
+source_series = ohif.get("source_series_instance_uid")
+if ohif.get("series_sop_instance_uids", {}).get(source_series) != expected_source_sops:
+    raise SystemExit("OHIF QIDO series evidence does not contain the exact PET objects")
 
 reports = {
     variant: json.loads((qc_root / f"reports/Lung_Dx-A0164_{variant}.json").read_text())
@@ -141,6 +153,16 @@ for viewer_name, viewer in (("3D Slicer", slicer), ("OHIF DICOMweb", ohif)):
                 f"{viewer_name} evidence for {variant} does not match QC: "
                 f"{actual} != {expected}"
             )
+        if viewer_name == "OHIF DICOMweb":
+            if viewer_objects[variant].get("wado_bytes") != report["output_bytes"]:
+                raise SystemExit(f"OHIF WADO byte count mismatch for {variant}")
+            if viewer_objects[variant].get("wado_sha256") != report["output_sha256"]:
+                raise SystemExit(f"OHIF WADO hash mismatch for {variant}")
+            series_uid = report["series_instance_uid"]
+            if ohif.get("series_sop_instance_uids", {}).get(series_uid) != [
+                report["sop_instance_uid"]
+            ]:
+                raise SystemExit(f"OHIF QIDO SEG identity mismatch for {variant}")
 PY
 
 cd "${ROOT}"

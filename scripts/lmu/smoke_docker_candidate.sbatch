@@ -28,33 +28,66 @@ test -f "${ROOT}/ALL_OUTPUTS_VALIDATED"
 [[ "${EXPECTED_REVISION}" =~ ^[0-9a-f]{40}$ ]]
 
 DIGEST_HEX="${CANDIDATE_DIGEST#sha256:}"
-CANDIDATE_DIR="${ROOT}/software/docker-candidates"
-CANDIDATE_SIF="${CANDIDATE_DIR}/lionz-${DIGEST_HEX}.sif"
 SMOKE_ROOT="${ROOT}/smoke/docker-candidate-${EXPECTED_VERSION}-${SLURM_JOB_ID}"
+CANDIDATE_SIF="${SMOKE_ROOT}/lionz-${DIGEST_HEX}.sif"
 mkdir -p \
-  "${CANDIDATE_DIR}" \
   "${SMOKE_ROOT}/input/${PATIENT}" \
-  "${ROOT}/tmp/singularity-cache"
-export SINGULARITY_CACHEDIR="${ROOT}/tmp/singularity-cache"
-export SINGULARITY_TMPDIR="${ROOT}/tmp"
+  "${SMOKE_ROOT}/validation" \
+  "${SMOKE_ROOT}/tmp" \
+  "${SMOKE_ROOT}/singularity-cache"
+export SINGULARITY_CACHEDIR="${SMOKE_ROOT}/singularity-cache"
+export SINGULARITY_TMPDIR="${SMOKE_ROOT}/tmp"
 
-if [[ ! -s "${CANDIDATE_SIF}" ]]; then
-  temporary="${CANDIDATE_DIR}/.lionz-${DIGEST_HEX}.${SLURM_JOB_ID}.sif"
-  singularity pull --disable-cache \
-    "${temporary}" \
-    "docker://${CANDIDATE_IMAGE}@${CANDIDATE_DIGEST}"
-  mv "${temporary}" "${CANDIDATE_SIF}"
-fi
+PULLED_REFERENCE="docker://${CANDIDATE_IMAGE}@${CANDIDATE_DIGEST}"
+singularity pull --disable-cache "${CANDIDATE_SIF}" "${PULLED_REFERENCE}"
+test -s "${CANDIDATE_SIF}"
+SIF_SHA256=$(sha256sum "${CANDIDATE_SIF}" | awk '{print $1}')
+INSPECT_JSON="${SMOKE_ROOT}/validation/singularity_inspect.json"
+singularity inspect --json "${CANDIDATE_SIF}" > "${INSPECT_JSON}"
+
+IFS=$'\t' read -r OBSERVED_VERSION OBSERVED_REVISION OBSERVED_SOURCE BUILD_FROM < <(
+  "${LION_PY}" - "${INSPECT_JSON}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1]))
+labels = payload["data"]["attributes"]["labels"]
+build_from = [
+    str(value)
+    for key, value in labels.items()
+    if key.endswith(".deffile.from")
+]
+if len(build_from) != 1:
+    raise SystemExit(f"Expected one Singularity deffile.from label: {build_from}")
+print(
+    labels.get("org.opencontainers.image.version", ""),
+    labels.get("org.opencontainers.image.revision", ""),
+    labels.get("org.opencontainers.image.source", ""),
+    build_from[0],
+    sep="\t",
+)
+PY
+)
+[[ "${BUILD_FROM}" == *"@${CANDIDATE_DIGEST}" ]]
+OBSERVED_DIGEST="${BUILD_FROM##*@}"
+[[ "${OBSERVED_DIGEST}" == "${CANDIDATE_DIGEST}" ]]
+[[ "${OBSERVED_VERSION}" == "${EXPECTED_VERSION}" ]]
+[[ "${OBSERVED_REVISION}" == "${EXPECTED_REVISION}" ]]
+[[ "${OBSERVED_SOURCE}" == "https://github.com/ENHANCE-PET/LION" ]]
 
 cp -a "${ROOT}/raw/${PATIENT}/PT" "${SMOKE_ROOT}/input/${PATIENT}/"
-export LIONZ_TELEMETRY=0
-export MPLCONFIGDIR="${ROOT}/mpl-cache"
 
 COMMON_ARGS=(
   --nv
+  --containall
+  --cleanenv
+  --no-home
+  --pwd /shared
   --bind "${SMOKE_ROOT}/input:/shared"
-  --bind "${LION_MODELS}:/usr/local/models"
-  --bind "${ROOT}/tmp:/tmp"
+  --bind "${LION_MODELS}:/usr/local/models:ro"
+  --bind "${SMOKE_ROOT}/tmp:/tmp"
+  --env LIONZ_TELEMETRY=0
+  --env MPLCONFIGDIR=/tmp/mpl-cache
   "${CANDIDATE_SIF}"
 )
 
@@ -62,8 +95,25 @@ hostname
 date -Is
 nvidia-smi
 singularity exec "${COMMON_ARGS[@]}" \
-  env EXPECTED_VERSION="${EXPECTED_VERSION}" EXPECTED_REVISION="${EXPECTED_REVISION}" \
-  python -c 'import importlib.metadata as metadata, os, torch; assert metadata.version("lionz") == os.environ["EXPECTED_VERSION"]; assert torch.cuda.get_device_name(0).startswith("NVIDIA B200"); assert torch.arange(8, device="cuda").sum().item() == 28; print("lionz", metadata.version("lionz"), "torch", torch.__version__, "cuda", torch.version.cuda, "gpu", torch.cuda.get_device_name(0))'
+  python - "${EXPECTED_VERSION}" > "${SMOKE_ROOT}/validation/runtime.json" <<'PY'
+import importlib.metadata as metadata
+import json
+import sys
+
+import torch
+
+version = metadata.version("lionz")
+gpu = torch.cuda.get_device_name(0)
+assert version == sys.argv[1]
+assert gpu.startswith("NVIDIA B200")
+assert torch.arange(8, device="cuda").sum().item() == 28
+print(json.dumps({
+    "lionz_version": version,
+    "torch_version": torch.__version__,
+    "cuda_version": torch.version.cuda,
+    "gpu": gpu,
+}, sort_keys=True))
+PY
 singularity exec "${COMMON_ARGS[@]}" lionz -d /shared -m fdg
 
 SEGMENTATION=$(find "${SMOKE_ROOT}/input/${PATIENT}" -path '*/lionz-*/segmentations/*.nii.gz' -type f -print -quit)
@@ -81,7 +131,9 @@ print(matches[0]["native_path"])
 PY
 )
 
-"${LION_PY}" - "${SEGMENTATION}" "${REFERENCE}" <<'PY'
+"${LION_PY}" - "${SEGMENTATION}" "${REFERENCE}" \
+  > "${SMOKE_ROOT}/validation/output_comparison.json" <<'PY'
+import json
 import sys
 
 import numpy as np
@@ -97,17 +149,60 @@ actual_array = sitk.GetArrayFromImage(actual)
 expected_array = sitk.GetArrayFromImage(expected)
 assert np.array_equal(actual_array, expected_array)
 assert int(np.count_nonzero(actual_array)) > 0
-print(f"Real-data candidate output exactly matches {sys.argv[2]}")
+print(json.dumps({
+    "exact_match": True,
+    "nonzero_voxels": int(np.count_nonzero(actual_array)),
+    "reference_path": sys.argv[2],
+}, sort_keys=True))
 PY
 
-{
-  printf 'candidate_image=%s\n' "${CANDIDATE_IMAGE}"
-  printf 'candidate_digest=%s\n' "${CANDIDATE_DIGEST}"
-  printf 'expected_version=%s\n' "${EXPECTED_VERSION}"
-  printf 'expected_revision=%s\n' "${EXPECTED_REVISION}"
-  printf 'patient=%s\n' "${PATIENT}"
-  printf 'segmentation=%s\n' "${SEGMENTATION}"
-  printf 'validated_at=%s\n' "$(date -Is)"
-} > "${SMOKE_ROOT}/VALIDATED"
+SEGMENTATION_SHA256=$(sha256sum "${SEGMENTATION}" | awk '{print $1}')
+REFERENCE_SHA256=$(sha256sum "${REFERENCE}" | awk '{print $1}')
+HOSTNAME=$(hostname)
+VALIDATED_AT=$(date -Is)
+export CANDIDATE_IMAGE CANDIDATE_DIGEST EXPECTED_VERSION EXPECTED_REVISION
+export OBSERVED_DIGEST OBSERVED_VERSION OBSERVED_REVISION OBSERVED_SOURCE
+export PULLED_REFERENCE BUILD_FROM SIF_SHA256 PATIENT SEGMENTATION
+export SEGMENTATION_SHA256 REFERENCE REFERENCE_SHA256 HOSTNAME VALIDATED_AT
+export SLURM_JOB_ID SMOKE_ROOT
+"${LION_PY}" - > "${SMOKE_ROOT}/VALIDATED.json" <<'PY'
+import json
+import os
+from pathlib import Path
 
-cat "${SMOKE_ROOT}/VALIDATED"
+runtime = json.loads(Path(os.environ["SMOKE_ROOT"], "validation/runtime.json").read_text())
+comparison = json.loads(
+    Path(os.environ["SMOKE_ROOT"], "validation/output_comparison.json").read_text()
+)
+report = {
+    "status": "validated",
+    "slurm_job_id": int(os.environ["SLURM_JOB_ID"]),
+    "hostname": os.environ["HOSTNAME"],
+    "candidate_image": os.environ["CANDIDATE_IMAGE"],
+    "requested_digest": os.environ["CANDIDATE_DIGEST"],
+    "observed_digest": os.environ["OBSERVED_DIGEST"],
+    "expected_version": os.environ["EXPECTED_VERSION"],
+    "observed_version": os.environ["OBSERVED_VERSION"],
+    "expected_revision": os.environ["EXPECTED_REVISION"],
+    "observed_revision": os.environ["OBSERVED_REVISION"],
+    "observed_source": os.environ["OBSERVED_SOURCE"],
+    "pulled_reference": os.environ["PULLED_REFERENCE"],
+    "singularity_build_from": os.environ["BUILD_FROM"],
+    "sif_sha256": os.environ["SIF_SHA256"],
+    "patient": os.environ["PATIENT"],
+    "segmentation": os.environ["SEGMENTATION"],
+    "segmentation_sha256": os.environ["SEGMENTATION_SHA256"],
+    "reference": os.environ["REFERENCE"],
+    "reference_sha256": os.environ["REFERENCE_SHA256"],
+    "output_exact_match": comparison["exact_match"],
+    "nonzero_voxels": comparison["nonzero_voxels"],
+    "runtime": runtime,
+    "models_read_only": True,
+    "contained_execution": True,
+    "validated_at": os.environ["VALIDATED_AT"],
+}
+print(json.dumps(report, indent=2, sort_keys=True))
+PY
+sha256sum "${SMOKE_ROOT}/VALIDATED.json" > "${SMOKE_ROOT}/VALIDATED.json.sha256"
+cat "${SMOKE_ROOT}/VALIDATED.json"
+cat "${SMOKE_ROOT}/VALIDATED.json.sha256"
