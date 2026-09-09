@@ -1,7 +1,7 @@
 # Pin the multi-platform Python image so rebuilding a release uses the same base.
 FROM python:3.10.20-slim-trixie@sha256:63669fd2563fa90b0442fa7b568e66e3667755636cda086d7bcaaa895f66fe39
 
-ARG LIONZ_VERSION=1.0.5
+ARG LIONZ_VERSION=1.0.6
 ARG LIONZ_REVISION=unknown
 
 ENV UV_PROJECT_ENVIRONMENT=/opt/lionz \
