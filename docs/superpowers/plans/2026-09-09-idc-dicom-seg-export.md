@@ -6,7 +6,7 @@
 
 **Architecture:** A small reusable Python module canonicalizes binary masks onto the exact source-DICOM grid and builds deterministic dcmqi metadata. A dataset CLI invokes pinned QIICR containers, validates each output structurally and by lossless round trip, and writes an auditable manifest. LMU Slurm jobs perform tool acquisition, one-case smoke validation, parallel batch conversion, and final archival.
 
-**Tech Stack:** Python 3.10+, SimpleITK, NumPy, pydicom, QIICR dcmqi 1.5.6, dicom3tools (`dciodvfy`, `dcentvfy`), Singularity, Slurm, pytest.
+**Tech Stack:** Python 3.10+, SimpleITK, NumPy, pydicom, QIICR dcmqi v1.5.7, dicom3tools (`dciodvfy`, `dcentvfy`), Singularity, Slurm, pytest.
 
 **Spec:** `docs/superpowers/specs/2026-09-09-idc-dicom-seg-export-design.md`
 
@@ -209,7 +209,7 @@ Expected: success, proving the scripts are not pre-existing untested behavior.
 
 - [ ] **Step 2: Write Slurm scripts with strict failure behavior**
 
-The bootstrap job pulls `qiicr/dcmqi:1.5.6` and `qiicr/dicom3tools:latest`
+The bootstrap job pulls `qiicr/dcmqi:v1.5.7` and `qiicr/dicom3tools:latest`
 inside `jobs-cpu`, stores SIF SHA-256 hashes, and prints tool versions. The
 export job validates prerequisites, runs `Lung_Dx-A0164` as a smoke case,
 requires all validation gates, then fans out patient/variant tasks across CPU

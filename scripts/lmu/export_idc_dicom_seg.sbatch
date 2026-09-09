@@ -17,7 +17,7 @@ MODE="${MODE:-full}"
 WORKERS="${WORKERS:-8}"
 OUTPUT_ROOT="${ROOT}/results/dicom-seg"
 TOOL_DIR="${ROOT}/software/dicom-seg-tools"
-DCMQI_SIF="${TOOL_DIR}/dcmqi-1.5.6.sif"
+DCMQI_SIF="${TOOL_DIR}/dcmqi-v1.5.7.sif"
 DICOM3TOOLS_SIF="${TOOL_DIR}/dicom3tools.sif"
 LION_SHA=39a2139b54895ab37e10affe21a4d38b785413ad
 

@@ -13,7 +13,7 @@ umask 002
 
 ROOT=/data2/core-rad-digitx/projects/lionz-lung-pet-ct-dx
 TOOL_DIR="${ROOT}/software/dicom-seg-tools"
-DCMQI_SIF="${TOOL_DIR}/dcmqi-1.5.6.sif"
+DCMQI_SIF="${TOOL_DIR}/dcmqi-v1.5.7.sif"
 DICOM3TOOLS_SIF="${TOOL_DIR}/dicom3tools.sif"
 
 mkdir -p "${TOOL_DIR}" "${ROOT}/logs" "${ROOT}/tmp/singularity-cache"
@@ -21,8 +21,8 @@ export SINGULARITY_CACHEDIR="${ROOT}/tmp/singularity-cache"
 export SINGULARITY_TMPDIR="${ROOT}/tmp"
 
 if [[ ! -s "${DCMQI_SIF}" ]]; then
-  temporary="${TOOL_DIR}/.dcmqi-1.5.6.${SLURM_JOB_ID}.sif"
-  singularity pull --disable-cache "${temporary}" docker://qiicr/dcmqi:1.5.6
+  temporary="${TOOL_DIR}/.dcmqi-v1.5.7.${SLURM_JOB_ID}.sif"
+  singularity pull --disable-cache "${temporary}" docker://qiicr/dcmqi:v1.5.7
   mv "${temporary}" "${DCMQI_SIF}"
 fi
 if [[ ! -s "${DICOM3TOOLS_SIF}" ]]; then
@@ -33,7 +33,7 @@ fi
 
 sha256sum "${DCMQI_SIF}" "${DICOM3TOOLS_SIF}" > "${TOOL_DIR}/SHA256SUMS"
 {
-  printf 'dcmqi_image=docker://qiicr/dcmqi:1.5.6\n'
+  printf 'dcmqi_image=docker://qiicr/dcmqi:v1.5.7\n'
   printf 'dicom3tools_image=docker://qiicr/dicom3tools:latest\n'
   printf 'created_at=%s\n' "$(date -Is)"
   singularity inspect "${DCMQI_SIF}"
@@ -44,4 +44,3 @@ singularity exec "${DCMQI_SIF}" sh -c 'command -v itkimage2segimage; command -v 
 singularity exec "${DICOM3TOOLS_SIF}" sh -c 'command -v dciodvfy; command -v dcentvfy'
 touch "${TOOL_DIR}/TOOLS_READY"
 date -Is
-
