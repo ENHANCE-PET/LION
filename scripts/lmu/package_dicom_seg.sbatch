@@ -111,6 +111,36 @@ if ohif.get("status") != "dicomweb_ok_ui_not_exercised":
     raise SystemExit("OHIF DICOMweb validation evidence is missing or inconsistent")
 if ohif.get("instances") != 421 or ohif.get("series") != 3:
     raise SystemExit("OHIF/Orthanc did not expose the complete smoke dataset")
+
+reports = {
+    variant: json.loads((qc_root / f"reports/Lung_Dx-A0164_{variant}.json").read_text())
+    for variant in ("native", "suv4")
+}
+expected_source_series_uid = reports["native"]["source_series_instance_uid"]
+for viewer_name, viewer in (("3D Slicer", slicer), ("OHIF DICOMweb", ohif)):
+    if viewer.get("exporter_commit") != reports["native"]["exporter_commit"]:
+        raise SystemExit(f"{viewer_name} evidence exporter commit mismatch")
+    if viewer.get("source_series_instance_uid") != expected_source_series_uid:
+        raise SystemExit(f"{viewer_name} evidence source series mismatch")
+    viewer_objects = {
+        item.get("variant"): item for item in viewer.get("seg_objects", [])
+    }
+    if set(viewer_objects) != {"native", "suv4"}:
+        raise SystemExit(f"{viewer_name} evidence does not identify both SEG objects")
+    for variant, report in reports.items():
+        expected = {
+            "variant": variant,
+            "sop_instance_uid": report["sop_instance_uid"],
+            "series_instance_uid": report["series_instance_uid"],
+            "output_bytes": report["output_bytes"],
+            "output_sha256": report["output_sha256"],
+        }
+        actual = {field: viewer_objects[variant].get(field) for field in expected}
+        if actual != expected:
+            raise SystemExit(
+                f"{viewer_name} evidence for {variant} does not match QC: "
+                f"{actual} != {expected}"
+            )
 PY
 
 cd "${ROOT}"
@@ -143,6 +173,7 @@ inputs = [
     pathlib.Path("software/LION-dicom-seg-export/lionz/dicom_seg.py"),
     pathlib.Path("software/LION-dicom-seg-export/scripts/export_idc_dicom_seg.py"),
     pathlib.Path("software/LION-dicom-seg-export/scripts/validate_slicer_dicom_seg.py"),
+    pathlib.Path("software/LION-dicom-seg-export/scripts/validate_ohif_dicomweb.py"),
     pathlib.Path("software/LION-dicom-seg-export/scripts/lmu/prepare_dicom_seg_tools.sbatch"),
     pathlib.Path("software/LION-dicom-seg-export/scripts/lmu/export_idc_dicom_seg.sbatch"),
     pathlib.Path("software/LION-dicom-seg-export/scripts/lmu/package_dicom_seg.sbatch"),

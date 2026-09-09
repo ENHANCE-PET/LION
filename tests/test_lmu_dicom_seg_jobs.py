@@ -23,6 +23,8 @@ def test_export_invalidates_markers_and_verifies_sif_hashes():
 
     assert 'rm -f "${OUTPUT_ROOT}/qc/COHORT_VALIDATED"' in script
     assert 'rm -f "${OUTPUT_ROOT}/qc/SMOKE_VALIDATED"' in script
+    assert 'rm -f "${OUTPUT_ROOT}/qc/viewer/slicer_validation.json"' in script
+    assert 'rm -f "${OUTPUT_ROOT}/qc/viewer/ohif_dicomweb_validation.json"' in script
     assert 'sha256sum -c "${TOOL_DIR}/SHA256SUMS"' in script
 
 
@@ -32,6 +34,7 @@ def test_packaging_rechecks_current_artifacts_and_tool_hashes():
     assert 'sha256sum -c "${ROOT}/software/dicom-seg-tools/SHA256SUMS"' in script
     assert "verify-artifacts" in script
     assert "summarize" in script
+    assert 'viewer.get("seg_objects"' in script
 
 
 def test_ohif_smoke_endpoint_is_loopback_only():
@@ -39,3 +42,26 @@ def test_ohif_smoke_endpoint_is_loopback_only():
 
     assert '"127.0.0.1:3001:80"' in compose
     assert '"8042:8042"' not in compose
+
+
+def test_viewer_validators_bind_evidence_to_seg_hashes_and_commit():
+    slicer_script = _text("scripts/validate_slicer_dicom_seg.py")
+    ohif_script = _text("scripts/validate_ohif_dicomweb.py")
+
+    for script in (slicer_script, ohif_script):
+        assert "exporter_commit" in script
+        assert "seg_objects" in script
+        assert "sha256" in script
+        assert "sop_instance_uid" in script
+        assert "series_instance_uid" in script
+
+
+def test_docker_candidate_smoke_uses_digest_b200_and_real_data():
+    script = _text("scripts/lmu/smoke_docker_candidate.sbatch")
+
+    assert "#SBATCH --partition=jobs-b200" in script
+    assert "#SBATCH --gres=gpu:b200:1" in script
+    assert '[[ "${CANDIDATE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]' in script
+    assert "Lung_Dx-A0164" in script
+    assert 'raw/${PATIENT}/PT' in script
+    assert "np.array_equal" in script

@@ -3,19 +3,69 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
 import traceback
 
 from DICOMLib import DICOMUtils
+import pydicom
 import slicer
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _dicom_evidence(bundle: Path) -> tuple[str, str, list[dict[str, object]]]:
+    source_headers = [
+        pydicom.dcmread(path, stop_before_pixels=True)
+        for path in sorted((bundle / "source-pt").glob("*.dcm"))
+    ]
+    if not source_headers:
+        raise RuntimeError("Slicer smoke bundle contains no source PET DICOM")
+    source_series_uids = {str(item.SeriesInstanceUID) for item in source_headers}
+    study_uids = {str(item.StudyInstanceUID) for item in source_headers}
+    if len(source_series_uids) != 1 or len(study_uids) != 1:
+        raise RuntimeError("Slicer smoke source is not one DICOM study/series")
+
+    variants_by_description = {
+        "LION FDG native DICOM SEG": "native",
+        "LION FDG SUV>=4 DICOM SEG": "suv4",
+    }
+    seg_objects: list[dict[str, object]] = []
+    for path in sorted((bundle / "seg").glob("*.dcm")):
+        dataset = pydicom.dcmread(path, stop_before_pixels=True)
+        description = str(dataset.SeriesDescription)
+        if description not in variants_by_description:
+            raise RuntimeError(f"Unexpected SEG SeriesDescription: {description}")
+        seg_objects.append(
+            {
+                "variant": variants_by_description[description],
+                "sop_instance_uid": str(dataset.SOPInstanceUID),
+                "series_instance_uid": str(dataset.SeriesInstanceUID),
+                "output_bytes": path.stat().st_size,
+                "output_sha256": _sha256(path),
+            }
+        )
+    if {item["variant"] for item in seg_objects} != {"native", "suv4"}:
+        raise RuntimeError("Slicer smoke bundle does not contain both SEG variants")
+    return study_uids.pop(), source_series_uids.pop(), seg_objects
 
 
 def main() -> int:
     bundle = Path(os.environ["LIONZ_SLICER_BUNDLE"])
     report_path = Path(os.environ["LIONZ_SLICER_REPORT"])
+    exporter_commit = os.environ["LIONZ_EXPORTER_COMMIT"].strip()
+    if len(exporter_commit) != 40:
+        raise RuntimeError("LIONZ_EXPORTER_COMMIT must be a full Git commit")
     expected_labels = {"LION FDG tumor", "LION FDG tumor SUV>=4"}
+    study_uid, source_series_uid, seg_objects = _dicom_evidence(bundle)
 
     slicer.mrmlScene.Clear(0)
     with DICOMUtils.TemporaryDICOMDatabase() as database:
@@ -125,6 +175,10 @@ def main() -> int:
             "reference_geometry_present": all(geometry_parameters),
             "bounds_within_reference": all(bounds_within_reference),
             "nonempty_binary_labelmaps": all(nonempty_binary_labelmaps),
+            "exporter_commit": exporter_commit,
+            "study_instance_uid": study_uid,
+            "source_series_instance_uid": source_series_uid,
+            "seg_objects": sorted(seg_objects, key=lambda item: str(item["variant"])),
         }
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

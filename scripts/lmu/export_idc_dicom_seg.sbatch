@@ -38,6 +38,8 @@ export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=2
 mkdir -p "${OUTPUT_ROOT}" "${ROOT}/logs" "${ROOT}/tmp"
 rm -f "${OUTPUT_ROOT}/qc/COHORT_VALIDATED"
 rm -f "${OUTPUT_ROOT}/qc/SMOKE_VALIDATED"
+rm -f "${OUTPUT_ROOT}/qc/viewer/slicer_validation.json"
+rm -f "${OUTPUT_ROOT}/qc/viewer/ohif_dicomweb_validation.json"
 
 sha256sum -c "${TOOL_DIR}/SHA256SUMS"
 DCMQI_SHA256=$(awk -v path="${DCMQI_SIF}" '$2 == path {print $1}' "${TOOL_DIR}/SHA256SUMS")
