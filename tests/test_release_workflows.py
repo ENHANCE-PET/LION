@@ -25,6 +25,9 @@ def test_promotion_is_bound_to_a_candidate_tag_and_protected_environment():
     assert 'expected_prefix="${LIONZ_VERSION}-candidate-"' in workflow
     assert "environment: dockerhub-production" in workflow
     assert 'org.opencontainers.image.revision' in workflow
+    assert 'lionz-${LIONZ_VERSION}-b200-smoke.json' in workflow
+    assert 'report["observed_digest"]' in workflow
+    assert 'report["observed_revision"]' in workflow
 
 
 def test_release_runtime_uses_a_torch_supported_python_version():

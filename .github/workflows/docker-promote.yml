@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Stable LION version, for example 1.0.5"
+        description: "Stable LION version, for example 1.0.6"
         required: true
         type: string
       candidate_tag:
@@ -50,6 +50,59 @@ jobs:
           [[ "$CANDIDATE_TAG" == "$expected_prefix"* ]]
           candidate_suffix="${CANDIDATE_TAG#"$expected_prefix"}"
           [[ "$candidate_suffix" =~ ^[0-9]+-[0-9]+$ ]]
+
+      - name: Download and verify LMU B200 attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          LIONZ_VERSION: ${{ inputs.version }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="lionz-${LIONZ_VERSION}-b200-smoke.json"
+          mkdir -p "$RUNNER_TEMP/b200-attestation"
+          gh release download "lionz-v.${LIONZ_VERSION}" \
+            --pattern "$asset" \
+            --dir "$RUNNER_TEMP/b200-attestation"
+
+          python - "$RUNNER_TEMP/b200-attestation/$asset" <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          report = json.load(open(sys.argv[1]))
+          revision = subprocess.check_output(
+              ["git", "rev-parse", "HEAD"], text=True
+          ).strip()
+          digest = os.environ["CANDIDATE_DIGEST"]
+          version = os.environ["LIONZ_VERSION"]
+          image = f'{os.environ["DOCKER_USERNAME"]}/lionz'
+
+          assert report["status"] == "validated"
+          assert report["candidate_image"] == image
+          assert report["requested_digest"] == digest
+          assert report["observed_digest"] == digest
+          assert report["expected_version"] == version
+          assert report["observed_version"] == version
+          assert report["expected_revision"] == revision
+          assert report["observed_revision"] == revision
+          assert report["observed_source"] == "https://github.com/ENHANCE-PET/LION"
+          assert report["pulled_reference"] == f"docker://{image}@{digest}"
+          assert report["singularity_build_from"].endswith(f"@{digest}")
+          assert re.fullmatch(r"[0-9a-f]{64}", report["sif_sha256"])
+          assert re.fullmatch(r"[0-9a-f]{64}", report["segmentation_sha256"])
+          assert report["patient"] == "Lung_Dx-A0164"
+          assert report["output_exact_match"] is True
+          assert report["nonzero_voxels"] > 0
+          assert report["runtime"]["lionz_version"] == version
+          assert report["runtime"]["gpu"].startswith("NVIDIA B200")
+          assert report["models_read_only"] is True
+          assert report["contained_execution"] is True
+          assert isinstance(report["slurm_job_id"], int)
+          PY
 
       - name: Verify stable package exists on PyPI
         env:
@@ -141,4 +194,5 @@ jobs:
             echo "Promoted LION $LIONZ_VERSION"
             echo "Candidate tag: $CANDIDATE_TAG"
             echo "Digest: $CANDIDATE_DIGEST"
+            echo "LMU B200 attestation: lionz-${LIONZ_VERSION}-b200-smoke.json"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,21 @@
+services:
+  orthanc:
+    image: orthancteam/orthanc:26.8.2@sha256:9758c8702a89abece99fcfe6d5571d5eaae59587e8e1ce36b9aafc8d4f24457b
+    container_name: lionz-ohif-smoke-orthanc
+    environment:
+      DICOM_WEB_PLUGIN_ENABLED: "true"
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      ORTHANC__REMOTE_ACCESS_ALLOWED: "true"
+    expose:
+      - "8042"
+
+  ohif:
+    image: ohif/app:v3.12.15@sha256:42e69dff6bab61463b9844b3d640dab8045bb6909095e5f89435441480cfd0b3
+    container_name: lionz-ohif-smoke-ohif
+    depends_on:
+      - orthanc
+    ports:
+      - "127.0.0.1:3001:80"
+    volumes:
+      - ./app-config.js:/usr/share/nginx/html/app-config.js:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro

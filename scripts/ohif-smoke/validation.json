@@ -1,0 +1,41 @@
+{
+  "status": "dicomweb_ok_ui_not_exercised",
+  "validated_at": "2026-09-09",
+  "patient_id": "Lung_Dx-A0164",
+  "browser_render": "not_run_no_controllable_browser",
+  "instances": 421,
+  "patients": 1,
+  "studies": 1,
+  "series": 3,
+  "study_instance_uid": "1.3.6.1.4.1.14519.5.2.1.6655.2359.294743418409053521352467291796",
+  "series_inventory": [
+    {
+      "modality": "PT",
+      "description": "PET WB Corrected",
+      "instances": 419,
+      "series_instance_uid": "1.3.6.1.4.1.14519.5.2.1.6655.2359.788162910000882035217022916485"
+    },
+    {
+      "modality": "SEG",
+      "description": "LION FDG native DICOM SEG",
+      "instances": 1,
+      "series_instance_uid": "1.2.276.0.7230010.3.1.3.8323329.1294859.1788985253.496502"
+    },
+    {
+      "modality": "SEG",
+      "description": "LION FDG SUV>=4 DICOM SEG",
+      "instances": 1,
+      "series_instance_uid": "1.2.276.0.7230010.3.1.3.8323329.1294858.1788985253.522735"
+    }
+  ],
+  "ohif": {
+    "image": "ohif/app:v3.12.15",
+    "digest": "sha256:42e69dff6bab61463b9844b3d640dab8045bb6909095e5f89435441480cfd0b3",
+    "endpoint": "http://localhost:3001"
+  },
+  "orthanc": {
+    "image": "orthancteam/orthanc:26.8.2",
+    "digest": "sha256:9758c8702a89abece99fcfe6d5571d5eaae59587e8e1ce36b9aafc8d4f24457b",
+    "endpoint": "http://localhost:8042"
+  }
+}
