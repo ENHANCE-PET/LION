@@ -39,7 +39,7 @@ suv4_count=$(find "${OUTPUT_ROOT}/suv4" -maxdepth 1 -type f -name '*.dcm' | wc -
 report_count=$(find "${QC_ROOT}/reports" -maxdepth 1 -type f -name '*.json' | wc -l)
 [[ "${native_count}" -eq 133 ]]
 [[ "${suv4_count}" -eq 130 ]]
-[[ "${report_count}" -eq 263 ]]
+[[ "${report_count}" -eq 266 ]]
 
 "${LION_PY}" - "${QC_ROOT}" <<'PY'
 import json
@@ -117,7 +117,7 @@ archive_suv4=$(unzip -Z1 "${TEMP_ARCHIVE}" | awk '/^results\/dicom-seg\/suv4\/[^
 archive_reports=$(unzip -Z1 "${TEMP_ARCHIVE}" | awk '/^results\/dicom-seg\/qc\/reports\/[^/]+[.]json$/ {n++} END {print n+0}')
 [[ "${archive_native}" -eq 133 ]]
 [[ "${archive_suv4}" -eq 130 ]]
-[[ "${archive_reports}" -eq 263 ]]
+[[ "${archive_reports}" -eq 266 ]]
 
 if unzip -Z1 "${TEMP_ARCHIVE}" | grep -Eq '(^|/)(raw|work)(/|$)'; then
   echo "Archive unexpectedly contains raw data or temporary work files" >&2
