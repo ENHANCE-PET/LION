@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import product
+from pathlib import Path
 from typing import Any
 import uuid
 
 import numpy as np
+import pydicom
+from pydicom.dataset import Dataset
+from pydicom.uid import ExplicitVRLittleEndian, SegmentationStorage
 import SimpleITK as sitk
 
 
@@ -18,6 +22,30 @@ class GeometryReport:
     input_voxels: int
     output_voxels: int
     max_corner_distance_mm: float
+
+
+@dataclass(frozen=True)
+class SourceSeries:
+    """Identifiers, ordered instances, and geometry for one source series."""
+
+    directory: Path
+    files: tuple[Path, ...]
+    image: sitk.Image
+    patient_id: str
+    study_instance_uid: str
+    series_instance_uid: str
+    frame_of_reference_uid: str
+    sop_instance_uids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SegReport:
+    """Independently parsed identity and reference facts from a DICOM SEG."""
+
+    sop_instance_uid: str
+    series_instance_uid: str
+    frame_count: int
+    referenced_sop_instance_uids: frozenset[str]
 
 
 def _physical_corners(image: sitk.Image) -> np.ndarray:
@@ -177,3 +205,205 @@ def build_dcmqi_metadata(
             ]
         ],
     }
+
+
+def _one_value(headers: list[Dataset], attribute: str) -> str:
+    values = {
+        str(getattr(header, attribute, "")).strip()
+        for header in headers
+    }
+    values.discard("")
+    if len(values) != 1:
+        raise ValueError(
+            f"Source DICOM must contain one consistent {attribute}, found "
+            f"{sorted(values)}"
+        )
+    return values.pop()
+
+
+def load_source_series(
+    directory: str | Path,
+    expected_series_uid: str | None = None,
+) -> SourceSeries:
+    """Load and validate exactly one PET DICOM series from a directory."""
+
+    source_directory = Path(directory)
+    discovered_files = tuple(sorted(source_directory.rglob("*.dcm")))
+    if not discovered_files:
+        raise ValueError(f"No DICOM files found in {source_directory}")
+
+    headers = [
+        pydicom.dcmread(path, stop_before_pixels=True)
+        for path in discovered_files
+    ]
+    patient_id = _one_value(headers, "PatientID")
+    study_uid = _one_value(headers, "StudyInstanceUID")
+    series_uid = _one_value(headers, "SeriesInstanceUID")
+    frame_uid = _one_value(headers, "FrameOfReferenceUID")
+    modality = _one_value(headers, "Modality")
+    if modality != "PT":
+        raise ValueError(f"Source DICOM Modality must be PT, found {modality}")
+    if expected_series_uid is not None and series_uid != expected_series_uid:
+        raise ValueError(
+            "Source SeriesInstanceUID does not match manifest: "
+            f"{series_uid} != {expected_series_uid}"
+        )
+
+    series_ids = sitk.ImageSeriesReader.GetGDCMSeriesIDs(str(source_directory))
+    if not series_ids or series_uid not in series_ids:
+        raise ValueError(
+            f"GDCM could not identify source SeriesInstanceUID {series_uid}"
+        )
+    ordered_names = sitk.ImageSeriesReader.GetGDCMSeriesFileNames(
+        str(source_directory), series_uid
+    )
+    ordered_files = tuple(Path(name) for name in ordered_names)
+    if len(ordered_files) != len(discovered_files):
+        raise ValueError(
+            "GDCM source instance count differs from discovered DICOM count: "
+            f"{len(ordered_files)} != {len(discovered_files)}"
+        )
+
+    reader = sitk.ImageSeriesReader()
+    reader.SetFileNames([str(path) for path in ordered_files])
+    image = reader.Execute()
+    header_by_path = {
+        path.resolve(): header for path, header in zip(discovered_files, headers)
+    }
+    sop_uids = tuple(
+        str(header_by_path[path.resolve()].SOPInstanceUID)
+        for path in ordered_files
+    )
+    if len(set(sop_uids)) != len(sop_uids):
+        raise ValueError("Source DICOM contains duplicate SOPInstanceUID values")
+
+    return SourceSeries(
+        directory=source_directory,
+        files=ordered_files,
+        image=image,
+        patient_id=patient_id,
+        study_instance_uid=study_uid,
+        series_instance_uid=series_uid,
+        frame_of_reference_uid=frame_uid,
+        sop_instance_uids=sop_uids,
+    )
+
+
+def _referenced_sop_uids(dataset: Dataset) -> frozenset[str]:
+    referenced: set[str] = set()
+    for series in getattr(dataset, "ReferencedSeriesSequence", []):
+        for instance in getattr(series, "ReferencedInstanceSequence", []):
+            uid = getattr(instance, "ReferencedSOPInstanceUID", None)
+            if uid:
+                referenced.add(str(uid))
+    for frame in getattr(dataset, "PerFrameFunctionalGroupsSequence", []):
+        for derivation in getattr(frame, "DerivationImageSequence", []):
+            for source in getattr(derivation, "SourceImageSequence", []):
+                uid = getattr(source, "ReferencedSOPInstanceUID", None)
+                if uid:
+                    referenced.add(str(uid))
+    return frozenset(referenced)
+
+
+def _code_tuple(dataset: Dataset) -> tuple[str, str, str]:
+    return (
+        str(dataset.CodeValue),
+        str(dataset.CodingSchemeDesignator),
+        str(dataset.CodeMeaning),
+    )
+
+
+def validate_seg_dataset(
+    path: str | Path,
+    source: SourceSeries,
+    variant: str,
+) -> SegReport:
+    """Independently validate DICOM SEG identity, semantics, and references."""
+
+    expected_labels = {
+        "native": "LION FDG tumor",
+        "suv4": "LION FDG tumor SUV>=4",
+    }
+    if variant not in expected_labels:
+        raise ValueError(f"Unknown DICOM SEG variant: {variant}")
+    dataset = pydicom.dcmread(path)
+
+    if str(dataset.SOPClassUID) != str(SegmentationStorage):
+        raise ValueError(f"Unexpected SOPClassUID: {dataset.SOPClassUID}")
+    if dataset.Modality != "SEG" or dataset.SegmentationType != "BINARY":
+        raise ValueError("Output must be a binary DICOM SEG object")
+    if str(dataset.file_meta.TransferSyntaxUID) != str(ExplicitVRLittleEndian):
+        raise ValueError(
+            "DICOM SEG must use uncompressed Explicit VR Little Endian"
+        )
+    if dataset.PatientID != source.patient_id:
+        raise ValueError("DICOM SEG PatientID differs from source")
+    if str(dataset.StudyInstanceUID) != source.study_instance_uid:
+        raise ValueError("DICOM SEG StudyInstanceUID differs from source")
+    if str(dataset.FrameOfReferenceUID) != source.frame_of_reference_uid:
+        raise ValueError("DICOM SEG FrameOfReferenceUID differs from source")
+
+    referenced_series_uids = {
+        str(item.SeriesInstanceUID)
+        for item in getattr(dataset, "ReferencedSeriesSequence", [])
+    }
+    if referenced_series_uids != {source.series_instance_uid}:
+        raise ValueError(
+            "DICOM SEG does not reference the expected source SeriesInstanceUID"
+        )
+    referenced_sops = _referenced_sop_uids(dataset)
+    if not referenced_sops:
+        raise ValueError("DICOM SEG contains no source SOPInstanceUID references")
+    unexpected_sops = referenced_sops.difference(source.sop_instance_uids)
+    if unexpected_sops:
+        raise ValueError(
+            "DICOM SEG references SOPInstanceUID values outside the source series: "
+            f"{sorted(unexpected_sops)}"
+        )
+
+    if len(dataset.SegmentSequence) != 1:
+        raise ValueError("DICOM SEG must contain exactly one segment")
+    segment = dataset.SegmentSequence[0]
+    if segment.SegmentLabel != expected_labels[variant]:
+        raise ValueError(f"Unexpected SegmentLabel: {segment.SegmentLabel}")
+    if segment.SegmentAlgorithmType != "AUTOMATIC":
+        raise ValueError("SegmentAlgorithmType must be AUTOMATIC")
+    if segment.SegmentAlgorithmName != "LION FDG 1.0.5":
+        raise ValueError("Unexpected SegmentAlgorithmName")
+    category = _code_tuple(segment.SegmentedPropertyCategoryCodeSequence[0])
+    property_type = _code_tuple(segment.SegmentedPropertyTypeCodeSequence[0])
+    if category != (
+        "49755003",
+        "SCT",
+        "Morphologically Abnormal Structure",
+    ):
+        raise ValueError(f"Unexpected segment category code: {category}")
+    if property_type != ("108369006", "SCT", "Neoplasm"):
+        raise ValueError(f"Unexpected segment property type code: {property_type}")
+
+    return SegReport(
+        sop_instance_uid=str(dataset.SOPInstanceUID),
+        series_instance_uid=str(dataset.SeriesInstanceUID),
+        frame_count=int(dataset.NumberOfFrames),
+        referenced_sop_instance_uids=referenced_sops,
+    )
+
+
+def _parse_validator_errors(text: str) -> tuple[str, ...]:
+    return tuple(
+        line.strip()
+        for line in text.splitlines()
+        if line.strip().lower().startswith("error")
+    )
+
+
+def parse_dciodvfy(text: str) -> tuple[str, ...]:
+    """Return fatal dciodvfy findings while leaving warnings for QC."""
+
+    return _parse_validator_errors(text)
+
+
+def parse_dcentvfy(text: str) -> tuple[str, ...]:
+    """Return fatal dcentvfy findings while leaving warnings for QC."""
+
+    return _parse_validator_errors(text)
