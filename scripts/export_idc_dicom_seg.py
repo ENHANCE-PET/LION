@@ -17,6 +17,7 @@ from lionz.dicom_seg import (
     build_dcmqi_metadata,
     canonicalize_binary_mask,
     load_source_series,
+    normalize_seg_dataset,
     parse_dcentvfy,
     parse_dciodvfy,
     physical_corner_distance,
@@ -380,6 +381,7 @@ def convert_task(
                 f"itkimage2segimage failed with return code {conversion.returncode}"
             )
 
+        normalizations = normalize_seg_dataset(temporary_output)
         seg = validate_seg_dataset(temporary_output, source, variant)
         dciodvfy_log = log_dir / f"{patient_id}_{variant}_dciodvfy.log"
         dciodvfy = _run_command(
@@ -463,6 +465,7 @@ def convert_task(
                 "sop_instance_uid": seg.sop_instance_uid,
                 "series_instance_uid": seg.series_instance_uid,
                 "frames": seg.frame_count,
+                "normalizations": list(normalizations),
                 "geometry": {
                     "input_voxels": geometry.input_voxels,
                     "output_voxels": geometry.output_voxels,

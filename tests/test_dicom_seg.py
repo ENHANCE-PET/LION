@@ -1,5 +1,6 @@
 import numpy as np
 from pathlib import Path
+import pydicom
 from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
 from pydicom.sequence import Sequence
 from pydicom.uid import (
@@ -18,6 +19,7 @@ from lionz.dicom_seg import (
     build_dcmqi_metadata,
     canonicalize_binary_mask,
     load_source_series,
+    normalize_seg_dataset,
     parse_dcentvfy,
     parse_dciodvfy,
     physical_corner_distance,
@@ -41,6 +43,31 @@ def test_dicom_seg_import_does_not_load_inference_dependencies():
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_normalize_seg_adds_required_trial_field_and_removes_optional_overlap(tmp_path):
+    path = tmp_path / "seg.dcm"
+    file_meta = FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = SegmentationStorage
+    file_meta.MediaStorageSOPInstanceUID = generate_uid()
+    file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    dataset = FileDataset(path, {}, file_meta=file_meta, preamble=b"\0" * 128)
+    dataset.SOPClassUID = SegmentationStorage
+    dataset.SOPInstanceUID = file_meta.MediaStorageSOPInstanceUID
+    dataset.ClinicalTrialSeriesID = "Session1"
+    dataset.ClinicalTrialTimePointID = "1"
+    dataset.SegmentsOverlap = "NO"
+    dataset.save_as(path, enforce_file_format=True)
+
+    changes = normalize_seg_dataset(path)
+
+    normalized = pydicom.dcmread(path)
+    assert normalized.ClinicalTrialCoordinatingCenterName == ""
+    assert "SegmentsOverlap" not in normalized
+    assert changes == (
+        "added_empty_ClinicalTrialCoordinatingCenterName",
+        "removed_optional_SegmentsOverlap",
+    )
 
 
 def _reference_image() -> sitk.Image:

@@ -305,6 +305,28 @@ def _referenced_sop_uids(dataset: Dataset) -> frozenset[str]:
     return frozenset(referenced)
 
 
+def normalize_seg_dataset(path: str | Path) -> tuple[str, ...]:
+    """Apply lossless compatibility normalizations before SEG validation."""
+
+    source_path = Path(path)
+    dataset = pydicom.dcmread(source_path)
+    changes: list[str] = []
+    if (
+        "ClinicalTrialSeriesID" in dataset
+        and "ClinicalTrialCoordinatingCenterName" not in dataset
+    ):
+        dataset.ClinicalTrialCoordinatingCenterName = ""
+        changes.append("added_empty_ClinicalTrialCoordinatingCenterName")
+    if "SegmentsOverlap" in dataset:
+        del dataset.SegmentsOverlap
+        changes.append("removed_optional_SegmentsOverlap")
+    if changes:
+        temporary = source_path.with_name(f".{source_path.name}.normalize.tmp")
+        dataset.save_as(temporary, enforce_file_format=True)
+        temporary.replace(source_path)
+    return tuple(changes)
+
+
 def _code_tuple(dataset: Dataset) -> tuple[str, str, str]:
     return (
         str(dataset.CodeValue),
