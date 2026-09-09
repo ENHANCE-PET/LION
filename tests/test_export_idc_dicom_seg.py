@@ -220,3 +220,19 @@ def test_dicom3tools_command_uses_container_absolute_binary_path():
         "-new",
         "/output/seg.dcm",
     ]
+
+
+def test_dcmqi_conversion_keeps_empty_source_frames_for_exact_roundtrip():
+    module = _load_script()
+
+    command = module._dcmqi_conversion_command(
+        "singularity",
+        "/tools/dcmqi.sif",
+        source_dir="/source",
+        canonical_path="/work/mask.nrrd",
+        metadata_path="/work/metadata.json",
+        output_path="/output/seg.dcm",
+    )
+
+    assert command[-2:] == ["--skip", "0"]
+    assert "--skipEmptySlices" not in command

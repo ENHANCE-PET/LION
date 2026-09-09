@@ -198,6 +198,36 @@ def _dicom3tools_command(
     )
 
 
+def _dcmqi_conversion_command(
+    singularity: str,
+    sif: str | Path,
+    *,
+    source_dir: str | Path,
+    canonical_path: str | Path,
+    metadata_path: str | Path,
+    output_path: str | Path,
+) -> list[str]:
+    return _singularity_command(
+        singularity,
+        sif,
+        "itkimage2segimage",
+        "--inputDICOMDirectory",
+        source_dir,
+        "--inputImageList",
+        canonical_path,
+        "--inputMetadata",
+        metadata_path,
+        "--outputDICOM",
+        output_path,
+        "--segmentationType",
+        "binary",
+        "--compress",
+        "none",
+        "--skip",
+        "0",
+    )
+
+
 def _exact_roundtrip(reference_path: Path, roundtrip_path: Path) -> dict[str, Any]:
     reference = sitk.ReadImage(str(reference_path))
     roundtrip = sitk.ReadImage(str(roundtrip_path))
@@ -314,24 +344,13 @@ def convert_task(
         log_dir = Path(task["validator_log_dir"])
         dcmqi_log = log_dir / f"{patient_id}_{variant}_itkimage2segimage.log"
         conversion = _run_command(
-            _singularity_command(
+            _dcmqi_conversion_command(
                 singularity,
                 dcmqi_sif,
-                "itkimage2segimage",
-                "--inputDICOMDirectory",
-                source.directory,
-                "--inputImageList",
-                canonical_path,
-                "--inputMetadata",
-                metadata_path,
-                "--outputDICOM",
-                temporary_output,
-                "--segmentationType",
-                "binary",
-                "--compress",
-                "none",
-                "--skipEmptySlices",
-                "0",
+                source_dir=source.directory,
+                canonical_path=canonical_path,
+                metadata_path=metadata_path,
+                output_path=temporary_output,
             ),
             dcmqi_log,
         )
