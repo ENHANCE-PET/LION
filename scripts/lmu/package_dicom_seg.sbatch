@@ -36,6 +36,7 @@ test -s "${ROOT}/software/LION-dicom-seg-export/EXPORTER_COMMIT"
 
 TOOL_DIR="${ROOT}/software/dicom-seg-tools"
 CODE_ROOT="${ROOT}/software/LION-dicom-seg-export"
+export PYTHONPATH="${CODE_ROOT}"
 DCMQI_SIF="${TOOL_DIR}/dcmqi-v1.5.7.sif"
 DICOM3TOOLS_SIF="${TOOL_DIR}/dicom3tools.sif"
 sha256sum -c "${ROOT}/software/dicom-seg-tools/SHA256SUMS"

@@ -31,6 +31,7 @@ def test_export_invalidates_markers_and_verifies_sif_hashes():
 def test_packaging_rechecks_current_artifacts_and_tool_hashes():
     script = _text("scripts/lmu/package_dicom_seg.sbatch")
 
+    assert 'export PYTHONPATH="${CODE_ROOT}"' in script
     assert 'sha256sum -c "${ROOT}/software/dicom-seg-tools/SHA256SUMS"' in script
     assert "verify-artifacts" in script
     assert "summarize" in script
