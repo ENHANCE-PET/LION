@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=lionz-docker-b200-smoke
 #SBATCH --account=core-rad-digitx
-#SBATCH --partition=jobs-b200
+#SBATCH --partition=jobs-gpu
 #SBATCH --nodelist=srvcore3
 #SBATCH --gres=gpu:b200:1
 #SBATCH --cpus-per-task=16

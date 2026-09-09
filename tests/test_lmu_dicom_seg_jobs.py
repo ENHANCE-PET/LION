@@ -64,7 +64,7 @@ def test_viewer_validators_bind_evidence_to_seg_hashes_and_commit():
 def test_docker_candidate_smoke_uses_digest_b200_and_real_data():
     script = _text("scripts/lmu/smoke_docker_candidate.sbatch")
 
-    assert "#SBATCH --partition=jobs-b200" in script
+    assert "#SBATCH --partition=jobs-gpu" in script
     assert "#SBATCH --gres=gpu:b200:1" in script
     assert '[[ "${CANDIDATE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]' in script
     assert "Lung_Dx-A0164" in script
