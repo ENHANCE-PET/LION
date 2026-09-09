@@ -5,15 +5,15 @@ services:
       DICOM_WEB_PLUGIN_ENABLED: "true"
       ORTHANC__AUTHENTICATION_ENABLED: "false"
       ORTHANC__REMOTE_ACCESS_ALLOWED: "true"
-    ports:
-      - "8042:8042"
+    expose:
+      - "8042"
 
   ohif:
     image: ohif/app:v3.12.15
     depends_on:
       - orthanc
     ports:
-      - "3001:80"
+      - "127.0.0.1:3001:80"
     volumes:
       - ./app-config.js:/usr/share/nginx/html/app-config.js:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro

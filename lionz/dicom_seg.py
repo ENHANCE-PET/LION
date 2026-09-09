@@ -36,6 +36,7 @@ class SourceSeries:
     series_instance_uid: str
     frame_of_reference_uid: str
     sop_instance_uids: tuple[str, ...]
+    sop_class_uids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -274,6 +275,10 @@ def load_source_series(
         str(header_by_path[path.resolve()].SOPInstanceUID)
         for path in ordered_files
     )
+    sop_class_uids = tuple(
+        str(header_by_path[path.resolve()].SOPClassUID)
+        for path in ordered_files
+    )
     if len(set(sop_uids)) != len(sop_uids):
         raise ValueError("Source DICOM contains duplicate SOPInstanceUID values")
 
@@ -286,23 +291,79 @@ def load_source_series(
         series_instance_uid=series_uid,
         frame_of_reference_uid=frame_uid,
         sop_instance_uids=sop_uids,
+        sop_class_uids=sop_class_uids,
     )
 
 
-def _referenced_sop_uids(dataset: Dataset) -> frozenset[str]:
-    referenced: set[str] = set()
+def _top_level_references(dataset: Dataset) -> tuple[tuple[str, str], ...]:
+    references: list[tuple[str, str]] = []
     for series in getattr(dataset, "ReferencedSeriesSequence", []):
         for instance in getattr(series, "ReferencedInstanceSequence", []):
-            uid = getattr(instance, "ReferencedSOPInstanceUID", None)
-            if uid:
-                referenced.add(str(uid))
-    for frame in getattr(dataset, "PerFrameFunctionalGroupsSequence", []):
+            references.append(
+                (
+                    str(getattr(instance, "ReferencedSOPClassUID", "")),
+                    str(getattr(instance, "ReferencedSOPInstanceUID", "")),
+                )
+            )
+    return tuple(references)
+
+
+def _per_frame_references(dataset: Dataset) -> tuple[tuple[str, str], ...]:
+    references: list[tuple[str, str]] = []
+    for frame_index, frame in enumerate(
+        getattr(dataset, "PerFrameFunctionalGroupsSequence", []), start=1
+    ):
+        frame_references: list[tuple[str, str]] = []
         for derivation in getattr(frame, "DerivationImageSequence", []):
             for source in getattr(derivation, "SourceImageSequence", []):
-                uid = getattr(source, "ReferencedSOPInstanceUID", None)
-                if uid:
-                    referenced.add(str(uid))
-    return frozenset(referenced)
+                frame_references.append(
+                    (
+                        str(getattr(source, "ReferencedSOPClassUID", "")),
+                        str(getattr(source, "ReferencedSOPInstanceUID", "")),
+                    )
+                )
+        if len(frame_references) != 1:
+            raise ValueError(
+                "Each DICOM SEG frame must contain exactly one source reference; "
+                f"frame {frame_index} contains {len(frame_references)}"
+            )
+        references.extend(frame_references)
+    return tuple(references)
+
+
+def _validate_reference_pairs(
+    references: tuple[tuple[str, str], ...],
+    source: SourceSeries,
+    *,
+    location: str,
+) -> frozenset[str]:
+    expected_by_uid = dict(zip(source.sop_instance_uids, source.sop_class_uids))
+    referenced_uids = [instance_uid for _, instance_uid in references]
+    for class_uid, instance_uid in references:
+        expected_class_uid = expected_by_uid.get(instance_uid)
+        if expected_class_uid is not None and class_uid != expected_class_uid:
+            raise ValueError(
+                f"{location} ReferencedSOPClassUID for {instance_uid} is "
+                f"{class_uid}, expected {expected_class_uid}"
+            )
+
+    referenced_set = frozenset(referenced_uids)
+    expected_set = frozenset(source.sop_instance_uids)
+    if len(referenced_uids) != len(referenced_set):
+        raise ValueError(f"DICOM SEG {location} source references contain duplicates")
+    unexpected = referenced_set.difference(expected_set)
+    if unexpected:
+        raise ValueError(
+            f"DICOM SEG {location} references SOPInstanceUID values outside the "
+            f"source series: {sorted(unexpected)}"
+        )
+    missing = expected_set.difference(referenced_set)
+    if missing:
+        raise ValueError(
+            f"DICOM SEG is missing source SOPInstanceUID references in {location}: "
+            f"{sorted(missing)}"
+        )
+    return referenced_set
 
 
 def normalize_seg_dataset(path: str | Path) -> tuple[str, ...]:
@@ -373,21 +434,22 @@ def validate_seg_dataset(
         raise ValueError(
             "DICOM SEG does not reference the expected source SeriesInstanceUID"
         )
-    referenced_sops = _referenced_sop_uids(dataset)
-    if not referenced_sops:
-        raise ValueError("DICOM SEG contains no source SOPInstanceUID references")
-    expected_sops = frozenset(source.sop_instance_uids)
-    unexpected_sops = referenced_sops.difference(expected_sops)
-    if unexpected_sops:
+    top_level_references = _top_level_references(dataset)
+    if not top_level_references:
+        raise ValueError("DICOM SEG contains no top-level source references")
+    referenced_sops = _validate_reference_pairs(
+        top_level_references, source, location="top-level"
+    )
+    per_frame_references = _per_frame_references(dataset)
+    per_frame_sops = _validate_reference_pairs(
+        per_frame_references, source, location="per-frame"
+    )
+    if per_frame_sops != referenced_sops:
+        raise ValueError("DICOM SEG top-level and per-frame source references differ")
+    if int(dataset.NumberOfFrames) != len(source.sop_instance_uids):
         raise ValueError(
-            "DICOM SEG references SOPInstanceUID values outside the source series: "
-            f"{sorted(unexpected_sops)}"
-        )
-    missing_sops = expected_sops.difference(referenced_sops)
-    if missing_sops:
-        raise ValueError(
-            "DICOM SEG is missing source SOPInstanceUID references: "
-            f"{sorted(missing_sops)}"
+            "DICOM SEG frame count does not match source instance count: "
+            f"{dataset.NumberOfFrames} != {len(source.sop_instance_uids)}"
         )
 
     if len(dataset.SegmentSequence) != 1:

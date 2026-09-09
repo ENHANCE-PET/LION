@@ -26,6 +26,7 @@ test -f "${ROOT}/ALL_OUTPUTS_VALIDATED"
 test -f "${TOOL_DIR}/TOOLS_READY"
 test -s "${DCMQI_SIF}"
 test -s "${DICOM3TOOLS_SIF}"
+test -s "${TOOL_DIR}/SHA256SUMS"
 test -f "${CODE_ROOT}/scripts/export_idc_dicom_seg.py"
 test -f "${CODE_ROOT}/lionz/dicom_seg.py"
 [[ "${MODE}" == "smoke" || "${MODE}" == "full" ]]
@@ -35,13 +36,26 @@ export PYTHONPATH="${CODE_ROOT}"
 export TMPDIR="${ROOT}/tmp"
 export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=2
 mkdir -p "${OUTPUT_ROOT}" "${ROOT}/logs" "${ROOT}/tmp"
+rm -f "${OUTPUT_ROOT}/qc/COHORT_VALIDATED"
+rm -f "${OUTPUT_ROOT}/qc/SMOKE_VALIDATED"
+
+sha256sum -c "${TOOL_DIR}/SHA256SUMS"
+DCMQI_SHA256=$(awk -v path="${DCMQI_SIF}" '$2 == path {print $1}' "${TOOL_DIR}/SHA256SUMS")
+DICOM3TOOLS_SHA256=$(awk -v path="${DICOM3TOOLS_SIF}" '$2 == path {print $1}' "${TOOL_DIR}/SHA256SUMS")
+EXPORTER_COMMIT=$(tr -d '[:space:]' < "${CODE_ROOT}/EXPORTER_COMMIT")
+[[ "${DCMQI_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${DICOM3TOOLS_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${EXPORTER_COMMIT}" =~ ^[0-9a-f]{40}$ ]]
 
 "${LION_PY}" "${CODE_ROOT}/scripts/export_idc_dicom_seg.py" prepare \
   --selection-csv "${ROOT}/manifest/fdg_pet_selection.csv" \
   --qc-csv "${ROOT}/qc/segmentation_validation.csv" \
   --project-dir "${ROOT}" \
   --output-root "${OUTPUT_ROOT}" \
-  --source-commit "${LION_SHA}"
+  --source-commit "${LION_SHA}" \
+  --exporter-commit "${EXPORTER_COMMIT}" \
+  --dcmqi-sha256 "${DCMQI_SHA256}" \
+  --dicom3tools-sha256 "${DICOM3TOOLS_SHA256}"
 
 TASKS_FILE="${OUTPUT_ROOT}/qc/dicom_seg_tasks.jsonl"
 EXPECTED_JSON="${OUTPUT_ROOT}/qc/dicom_seg_expected.json"

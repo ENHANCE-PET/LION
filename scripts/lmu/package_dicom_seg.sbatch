@@ -34,6 +34,30 @@ test -s "${ROOT}/software/dicom-seg-tools/SHA256SUMS"
 test -s "${ROOT}/software/dicom-seg-tools/container_provenance.txt"
 test -s "${ROOT}/software/LION-dicom-seg-export/EXPORTER_COMMIT"
 
+TOOL_DIR="${ROOT}/software/dicom-seg-tools"
+CODE_ROOT="${ROOT}/software/LION-dicom-seg-export"
+DCMQI_SIF="${TOOL_DIR}/dcmqi-v1.5.7.sif"
+DICOM3TOOLS_SIF="${TOOL_DIR}/dicom3tools.sif"
+sha256sum -c "${ROOT}/software/dicom-seg-tools/SHA256SUMS"
+DCMQI_SHA256=$(awk -v path="${DCMQI_SIF}" '$2 == path {print $1}' "${TOOL_DIR}/SHA256SUMS")
+DICOM3TOOLS_SHA256=$(awk -v path="${DICOM3TOOLS_SIF}" '$2 == path {print $1}' "${TOOL_DIR}/SHA256SUMS")
+EXPORTER_COMMIT=$(tr -d '[:space:]' < "${CODE_ROOT}/EXPORTER_COMMIT")
+[[ "${DCMQI_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${DICOM3TOOLS_SHA256}" =~ ^[0-9a-f]{64}$ ]]
+[[ "${EXPORTER_COMMIT}" =~ ^[0-9a-f]{40}$ ]]
+
+"${LION_PY}" "${CODE_ROOT}/scripts/export_idc_dicom_seg.py" summarize \
+  --expected-json "${QC_ROOT}/dicom_seg_expected.json" \
+  --output-json "${QC_ROOT}/dicom_seg_validation.json" \
+  --output-csv "${QC_ROOT}/dicom_seg_validation.csv"
+"${LION_PY}" "${CODE_ROOT}/scripts/export_idc_dicom_seg.py" verify-artifacts \
+  --report-dir "${QC_ROOT}/reports" \
+  --output-root "${OUTPUT_ROOT}" \
+  --exporter-commit "${EXPORTER_COMMIT}" \
+  --dcmqi-sha256 "${DCMQI_SHA256}" \
+  --dicom3tools-sha256 "${DICOM3TOOLS_SHA256}" \
+  --output-json "${QC_ROOT}/dicom_seg_artifacts.json"
+
 native_count=$(find "${OUTPUT_ROOT}/native" -maxdepth 1 -type f -name '*.dcm' | wc -l)
 suv4_count=$(find "${OUTPUT_ROOT}/suv4" -maxdepth 1 -type f -name '*.dcm' | wc -l)
 report_count=$(find "${QC_ROOT}/reports" -maxdepth 1 -type f -name '*.json' | wc -l)
@@ -73,6 +97,14 @@ if summary.get("empty_suv4") != [
 slicer = json.loads((qc_root / "viewer/slicer_validation.json").read_text())
 if slicer.get("status") != "ok" or slicer.get("segmentation_nodes") != 2:
     raise SystemExit("3D Slicer viewer validation did not pass")
+for field in (
+    "scene_cleared_before_load",
+    "reference_geometry_present",
+    "bounds_within_reference",
+    "nonempty_binary_labelmaps",
+):
+    if slicer.get(field) is not True:
+        raise SystemExit(f"3D Slicer viewer validation is missing {field}")
 
 ohif = json.loads((qc_root / "viewer/ohif_dicomweb_validation.json").read_text())
 if ohif.get("status") != "dicomweb_ok_ui_not_exercised":
@@ -127,6 +159,8 @@ with zipfile.ZipFile(
     allowZip64=True,
 ) as output:
     for item in inputs:
+        if not item.exists():
+            raise SystemExit(f"Required archive input does not exist: {item}")
         files = [item] if item.is_file() else sorted(
             candidate for candidate in item.rglob("*") if candidate.is_file()
         )

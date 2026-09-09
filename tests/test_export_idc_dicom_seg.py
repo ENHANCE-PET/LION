@@ -1,9 +1,12 @@
 import csv
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
+import SimpleITK as sitk
 
 
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "export_idc_dicom_seg.py"
@@ -79,6 +82,9 @@ def test_prepare_records_empty_suv4_without_conversion(tmp_path):
         project_dir=project,
         output_root=project / "results" / "dicom-seg",
         source_commit="39a2139",
+        exporter_commit="abcdef0123456789",
+        dcmqi_sha256="1" * 64,
+        dicom3tools_sha256="2" * 64,
     )
 
     assert result["expected_native"] == 3
@@ -86,6 +92,11 @@ def test_prepare_records_empty_suv4_without_conversion(tmp_path):
     assert result["empty_suv4"] == ["Lung_Dx-A0003"]
     tasks = [json.loads(line) for line in Path(result["tasks_file"]).read_text().splitlines()]
     assert len(tasks) == 5
+    assert all(task["exporter_commit"] == "abcdef0123456789" for task in tasks)
+    assert all(
+        task["tool_sha256"] == {"dcmqi": "1" * 64, "dicom3tools": "2" * 64}
+        for task in tasks
+    )
     assert {(task["patient_id"], task["variant"]) for task in tasks} == {
         ("Lung_Dx-A0001", "native"),
         ("Lung_Dx-A0001", "suv4"),
@@ -97,6 +108,7 @@ def test_prepare_records_empty_suv4_without_conversion(tmp_path):
         (project / "results" / "dicom-seg" / "qc" / "reports" / "Lung_Dx-A0003_suv4.json").read_text()
     )
     assert empty_report["status"] == "NO_SEGMENT_ABOVE_THRESHOLD"
+    assert empty_report["exporter_commit"] == "abcdef0123456789"
 
 
 def _write_report(
@@ -247,6 +259,97 @@ def test_summarize_rejects_unknown_report_status(tmp_path):
             expected_native=0,
             expected_suv4=0,
             expected_empty_suv4=[],
+        )
+
+
+def _write_roundtrip_image(path: Path, array: np.ndarray) -> sitk.Image:
+    image = sitk.GetImageFromArray(array)
+    image.SetSpacing((2.0, 3.0, 4.0))
+    image.SetOrigin((-5.0, 7.0, 11.0))
+    sitk.WriteImage(image, str(path))
+    return image
+
+
+def test_exact_roundtrip_rejects_changed_positive_label_value(tmp_path):
+    module = _load_script()
+    reference_array = np.zeros((2, 3, 4), dtype=np.uint8)
+    reference_array[0, 1, 2] = 1
+    changed_array = reference_array.copy()
+    changed_array[0, 1, 2] = 2
+    reference_path = tmp_path / "reference.nrrd"
+    changed_path = tmp_path / "changed.nrrd"
+    _write_roundtrip_image(reference_path, reference_array)
+    _write_roundtrip_image(changed_path, changed_array)
+
+    report = module._exact_roundtrip(reference_path, changed_path)
+
+    assert report["equal"] is False
+    assert report["binary_values"] is False
+
+
+def test_exact_roundtrip_rejects_mirrored_direction_with_same_corners(tmp_path):
+    module = _load_script()
+    array = np.zeros((2, 3, 4), dtype=np.uint8)
+    array[0, 1, 2] = 1
+    reference_path = tmp_path / "reference.nrrd"
+    mirrored_path = tmp_path / "mirrored.nrrd"
+    reference = _write_roundtrip_image(reference_path, array)
+    mirrored = sitk.GetImageFromArray(array)
+    mirrored.SetSpacing(reference.GetSpacing())
+    mirrored.SetDirection((-1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0))
+    mirrored.SetOrigin(
+        (
+            reference.GetOrigin()[0]
+            + (reference.GetSize()[0] - 1) * reference.GetSpacing()[0],
+            reference.GetOrigin()[1],
+            reference.GetOrigin()[2],
+        )
+    )
+    sitk.WriteImage(mirrored, str(mirrored_path))
+
+    report = module._exact_roundtrip(reference_path, mirrored_path)
+
+    assert report["max_corner_distance_mm"] == pytest.approx(0.0)
+    assert report["geometry_equal"] is False
+    assert report["equal"] is False
+
+
+def test_verify_output_artifacts_rejects_replaced_dicom(tmp_path):
+    module = _load_script()
+    output_root = tmp_path / "dicom-seg"
+    report_dir = output_root / "qc" / "reports"
+    output_path = output_root / "native" / "Lung_Dx-A0001_LION_FDG_native.dcm"
+    output_path.parent.mkdir(parents=True)
+    report_dir.mkdir(parents=True)
+    output_path.write_bytes(b"validated-seg")
+    report = {
+        "patient_id": "Lung_Dx-A0001",
+        "variant": "native",
+        "status": "ok",
+        "output_path": str(output_path),
+        "output_bytes": output_path.stat().st_size,
+        "output_sha256": hashlib.sha256(output_path.read_bytes()).hexdigest(),
+        "exporter_commit": "abcdef0123456789",
+        "source_commit": "39a2139",
+        "tool_sha256": {"dcmqi": "1" * 64, "dicom3tools": "2" * 64},
+    }
+    (report_dir / "Lung_Dx-A0001_native.json").write_text(json.dumps(report))
+
+    verified = module.verify_output_artifacts(
+        report_dir=report_dir,
+        output_root=output_root,
+        exporter_commit="abcdef0123456789",
+        tool_sha256={"dcmqi": "1" * 64, "dicom3tools": "2" * 64},
+    )
+    assert verified["objects"] == 1
+
+    output_path.write_bytes(b"tamperedd-seg")
+    with pytest.raises(ValueError, match="SHA-256"):
+        module.verify_output_artifacts(
+            report_dir=report_dir,
+            output_root=output_root,
+            exporter_commit="abcdef0123456789",
+            tool_sha256={"dcmqi": "1" * 64, "dicom3tools": "2" * 64},
         )
 
 

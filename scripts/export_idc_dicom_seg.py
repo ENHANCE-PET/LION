@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -62,6 +63,21 @@ def _integer(row: dict[str, str], field: str, patient_id: str) -> int:
     return value
 
 
+def _validated_sha256(value: str, *, name: str) -> str:
+    digest = value.strip().lower()
+    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        raise ValueError(f"{name} must be a 64-character hexadecimal SHA-256")
+    return digest
+
+
+def _sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def prepare_export(
     *,
     selection_csv: str | Path,
@@ -69,6 +85,9 @@ def prepare_export(
     project_dir: str | Path,
     output_root: str | Path,
     source_commit: str,
+    exporter_commit: str,
+    dcmqi_sha256: str,
+    dicom3tools_sha256: str,
 ) -> dict[str, Any]:
     """Build the deterministic cohort task manifest and empty-mask records."""
 
@@ -91,6 +110,14 @@ def prepare_export(
         )
     if not source_commit.strip():
         raise ValueError("source_commit must not be empty")
+    if not exporter_commit.strip():
+        raise ValueError("exporter_commit must not be empty")
+    tool_sha256 = {
+        "dcmqi": _validated_sha256(dcmqi_sha256, name="dcmqi_sha256"),
+        "dicom3tools": _validated_sha256(
+            dicom3tools_sha256, name="dicom3tools_sha256"
+        ),
+    }
 
     report_dir = output / "qc" / "reports"
     tasks: list[dict[str, Any]] = []
@@ -111,6 +138,8 @@ def prepare_export(
             "expected_series_uid": selection["SeriesInstanceUID"],
             "source_dir": str(project / "raw" / patient_id / "PT"),
             "source_commit": source_commit,
+            "exporter_commit": exporter_commit,
+            "tool_sha256": tool_sha256,
             "native_mask_path": qc["native_path"],
         }
         for variant, voxels in (("native", native_voxels), ("suv4", suv4_voxels)):
@@ -125,6 +154,9 @@ def prepare_export(
                         "status": EMPTY_STATUS,
                         "source_voxels": 0,
                         "mask_path": qc["suv4_path"],
+                        "source_commit": source_commit,
+                        "exporter_commit": exporter_commit,
+                        "tool_sha256": tool_sha256,
                     },
                 )
                 continue
@@ -149,6 +181,8 @@ def prepare_export(
     result = {
         "status": "prepared",
         "source_commit": source_commit,
+        "exporter_commit": exporter_commit,
+        "tool_sha256": tool_sha256,
         "patients": len(selection_by_patient),
         "expected_native": sum(task["variant"] == "native" for task in tasks),
         "expected_suv4": sum(task["variant"] == "suv4" for task in tasks),
@@ -253,8 +287,13 @@ def _dcmqi_conversion_command(
 def _exact_roundtrip(reference_path: Path, roundtrip_path: Path) -> dict[str, Any]:
     reference = sitk.ReadImage(str(reference_path))
     roundtrip = sitk.ReadImage(str(roundtrip_path))
-    reference_array = sitk.GetArrayFromImage(reference) > 0
-    roundtrip_array = sitk.GetArrayFromImage(roundtrip) > 0
+    reference_array = sitk.GetArrayFromImage(reference)
+    roundtrip_array = sitk.GetArrayFromImage(roundtrip)
+    reference_values = set(np.unique(reference_array).tolist())
+    roundtrip_values = set(np.unique(roundtrip_array).tolist())
+    binary_values = reference_values.issubset({0, 1}) and roundtrip_values.issubset(
+        {0, 1}
+    )
     same_shape = reference_array.shape == roundtrip_array.shape
     differing = (
         int(np.count_nonzero(reference_array != roundtrip_array))
@@ -262,12 +301,12 @@ def _exact_roundtrip(reference_path: Path, roundtrip_path: Path) -> dict[str, An
         else -1
     )
     intersection = (
-        int(np.count_nonzero(reference_array & roundtrip_array))
+        int(np.count_nonzero((reference_array == 1) & (roundtrip_array == 1)))
         if same_shape
         else 0
     )
-    denominator = int(np.count_nonzero(reference_array)) + int(
-        np.count_nonzero(roundtrip_array)
+    denominator = int(np.count_nonzero(reference_array == 1)) + int(
+        np.count_nonzero(roundtrip_array == 1)
     )
     dice = 1.0 if denominator == 0 else (2.0 * intersection / denominator)
     geometry_distance = (
@@ -275,18 +314,23 @@ def _exact_roundtrip(reference_path: Path, roundtrip_path: Path) -> dict[str, An
         if reference.GetDimension() == roundtrip.GetDimension()
         else float("inf")
     )
-    equal = (
-        same_shape
-        and differing == 0
-        and geometry_distance <= 0.05
-        and reference.GetSize() == roundtrip.GetSize()
+    geometry_equal = (
+        reference.GetSize() == roundtrip.GetSize()
+        and np.allclose(reference.GetSpacing(), roundtrip.GetSpacing(), rtol=0, atol=1e-4)
+        and np.allclose(reference.GetOrigin(), roundtrip.GetOrigin(), rtol=0, atol=1e-4)
+        and np.allclose(reference.GetDirection(), roundtrip.GetDirection(), rtol=0, atol=1e-4)
     )
+    equal = binary_values and same_shape and differing == 0 and geometry_equal
     return {
         "equal": equal,
+        "binary_values": binary_values,
+        "reference_values": sorted(reference_values),
+        "roundtrip_values": sorted(roundtrip_values),
+        "geometry_equal": geometry_equal,
         "dice": dice,
         "differing_voxels": differing,
-        "reference_voxels": int(np.count_nonzero(reference_array)),
-        "roundtrip_voxels": int(np.count_nonzero(roundtrip_array)),
+        "reference_voxels": int(np.count_nonzero(reference_array == 1)),
+        "roundtrip_voxels": int(np.count_nonzero(roundtrip_array == 1)),
         "max_corner_distance_mm": geometry_distance,
     }
 
@@ -455,10 +499,17 @@ def convert_task(
                 raise ValueError("SUV>=4 mask is not a subset of the native mask")
 
         temporary_output.replace(output_path)
+        output_sha256 = _sha256_file(output_path)
+        output_bytes = output_path.stat().st_size
         report.update(
             {
                 "status": "ok",
                 "output_path": str(output_path),
+                "output_bytes": output_bytes,
+                "output_sha256": output_sha256,
+                "source_commit": task["source_commit"],
+                "exporter_commit": task["exporter_commit"],
+                "tool_sha256": task["tool_sha256"],
                 "source_series_instance_uid": source.series_instance_uid,
                 "source_sop_instances": len(source.sop_instance_uids),
                 "referenced_sop_instances": len(seg.referenced_sop_instance_uids),
@@ -491,6 +542,75 @@ def convert_task(
         report["error"] = f"{type(exc).__name__}: {exc}"
         _atomic_json(report_path, report)
         raise
+
+
+def verify_output_artifacts(
+    *,
+    report_dir: str | Path,
+    output_root: str | Path,
+    exporter_commit: str,
+    tool_sha256: dict[str, str],
+) -> dict[str, Any]:
+    """Bind successful QC reports to the exact current DICOM SEG files."""
+
+    reports = [
+        json.loads(path.read_text())
+        for path in sorted(Path(report_dir).glob("*.json"))
+    ]
+    output = Path(output_root).resolve()
+    expected_tools = {
+        "dcmqi": _validated_sha256(tool_sha256["dcmqi"], name="dcmqi_sha256"),
+        "dicom3tools": _validated_sha256(
+            tool_sha256["dicom3tools"], name="dicom3tools_sha256"
+        ),
+    }
+    expected_paths: set[Path] = set()
+    for report in reports:
+        if report.get("exporter_commit") != exporter_commit:
+            raise ValueError(
+                f"Exporter commit mismatch for {report.get('patient_id')}/"
+                f"{report.get('variant')}"
+            )
+        if report.get("tool_sha256") != expected_tools:
+            raise ValueError(
+                f"Tool SHA-256 mismatch for {report.get('patient_id')}/"
+                f"{report.get('variant')}"
+            )
+        if not str(report.get("source_commit", "")).strip():
+            raise ValueError(f"Missing model source commit for {report.get('patient_id')}")
+        if report.get("status") != "ok":
+            continue
+
+        variant = report.get("variant")
+        path = Path(str(report.get("output_path", ""))).resolve()
+        expected_parent = (output / str(variant)).resolve()
+        if path.parent != expected_parent or path.suffix.lower() != ".dcm":
+            raise ValueError(f"Unexpected output path in report: {path}")
+        if not path.is_file():
+            raise ValueError(f"Reported DICOM SEG does not exist: {path}")
+        expected_paths.add(path)
+        if report.get("output_bytes") != path.stat().st_size:
+            raise ValueError(f"Output size mismatch for {path}")
+        if report.get("output_sha256") != _sha256_file(path):
+            raise ValueError(f"Output SHA-256 mismatch for {path}")
+
+    actual_paths = {
+        path.resolve()
+        for variant in ("native", "suv4")
+        for path in (output / variant).glob("*.dcm")
+    }
+    if actual_paths != expected_paths:
+        missing = sorted(str(path) for path in expected_paths - actual_paths)
+        unreported = sorted(str(path) for path in actual_paths - expected_paths)
+        raise ValueError(
+            f"Report/output inventory mismatch: missing={missing}, unreported={unreported}"
+        )
+    return {
+        "status": "ok",
+        "objects": len(actual_paths),
+        "exporter_commit": exporter_commit,
+        "tool_sha256": expected_tools,
+    }
 
 
 def validate_existing_task(
@@ -681,6 +801,9 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--project-dir", required=True, type=Path)
     prepare.add_argument("--output-root", required=True, type=Path)
     prepare.add_argument("--source-commit", required=True)
+    prepare.add_argument("--exporter-commit", required=True)
+    prepare.add_argument("--dcmqi-sha256", required=True)
+    prepare.add_argument("--dicom3tools-sha256", required=True)
 
     for command in ("convert-one", "validate-one"):
         one = subparsers.add_parser(command)
@@ -698,6 +821,14 @@ def _parser() -> argparse.ArgumentParser:
     summarize.add_argument("--expected-json", required=True, type=Path)
     summarize.add_argument("--output-json", required=True, type=Path)
     summarize.add_argument("--output-csv", required=True, type=Path)
+
+    verify = subparsers.add_parser("verify-artifacts")
+    verify.add_argument("--report-dir", required=True, type=Path)
+    verify.add_argument("--output-root", required=True, type=Path)
+    verify.add_argument("--exporter-commit", required=True)
+    verify.add_argument("--dcmqi-sha256", required=True)
+    verify.add_argument("--dicom3tools-sha256", required=True)
+    verify.add_argument("--output-json", required=True, type=Path)
     return parser
 
 
@@ -710,6 +841,9 @@ def main() -> int:
             project_dir=args.project_dir,
             output_root=args.output_root,
             source_commit=args.source_commit,
+            exporter_commit=args.exporter_commit,
+            dcmqi_sha256=args.dcmqi_sha256,
+            dicom3tools_sha256=args.dicom3tools_sha256,
         )
     elif args.command in {"convert-one", "validate-one"}:
         if args.patient_id and not args.variant:
@@ -733,7 +867,7 @@ def main() -> int:
                 dicom3tools_sif=args.dicom3tools_sif,
                 singularity=args.singularity,
             )
-    else:
+    elif args.command == "summarize":
         expected = json.loads(args.expected_json.read_text())
         report_dir = Path(expected["report_dir"])
         result = summarize_reports(
@@ -745,6 +879,17 @@ def main() -> int:
         reports = [json.loads(path.read_text()) for path in sorted(report_dir.glob("*.json"))]
         _atomic_json(args.output_json, result)
         _write_summary_csv(args.output_csv, reports)
+    else:
+        result = verify_output_artifacts(
+            report_dir=args.report_dir,
+            output_root=args.output_root,
+            exporter_commit=args.exporter_commit,
+            tool_sha256={
+                "dcmqi": args.dcmqi_sha256,
+                "dicom3tools": args.dicom3tools_sha256,
+            },
+        )
+        _atomic_json(args.output_json, result)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

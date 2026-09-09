@@ -4,6 +4,7 @@ import pydicom
 from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
 from pydicom.sequence import Sequence
 from pydicom.uid import (
+    CTImageStorage,
     ExplicitVRLittleEndian,
     PositronEmissionTomographyImageStorage,
     SegmentationStorage,
@@ -246,6 +247,9 @@ def _write_pet_dicom_series(directory, *, series_uid: str) -> SourceSeries:
         series_instance_uid=series_uid,
         frame_of_reference_uid=frame_uid,
         sop_instance_uids=tuple(sop_uids),
+        sop_class_uids=tuple(
+            str(PositronEmissionTomographyImageStorage) for _ in sop_uids
+        ),
     )
 
 
@@ -292,7 +296,7 @@ def _write_seg_dataset(path, source: SourceSeries, *, variant: str = "native"):
     dataset.FrameOfReferenceUID = source.frame_of_reference_uid
     dataset.Modality = "SEG"
     dataset.SegmentationType = "BINARY"
-    dataset.NumberOfFrames = 1
+    dataset.NumberOfFrames = len(source.sop_instance_uids)
 
     segment = Dataset()
     segment.SegmentNumber = 1
@@ -318,6 +322,17 @@ def _write_seg_dataset(path, source: SourceSeries, *, variant: str = "native"):
         item.ReferencedSOPInstanceUID = source_sop_uid
         referenced_series.ReferencedInstanceSequence.append(item)
     dataset.ReferencedSeriesSequence = Sequence([referenced_series])
+
+    dataset.PerFrameFunctionalGroupsSequence = Sequence([])
+    for source_sop_uid in source.sop_instance_uids:
+        source_image = Dataset()
+        source_image.ReferencedSOPClassUID = PositronEmissionTomographyImageStorage
+        source_image.ReferencedSOPInstanceUID = source_sop_uid
+        derivation = Dataset()
+        derivation.SourceImageSequence = Sequence([source_image])
+        frame = Dataset()
+        frame.DerivationImageSequence = Sequence([derivation])
+        dataset.PerFrameFunctionalGroupsSequence.append(frame)
     dataset.save_as(path, enforce_file_format=True)
 
 
@@ -333,7 +348,7 @@ def test_seg_validator_accepts_correct_source_references(tmp_path):
     assert report.referenced_sop_instance_uids == frozenset(
         source.sop_instance_uids
     )
-    assert report.frame_count == 1
+    assert report.frame_count == 2
 
 
 def test_seg_validator_rejects_wrong_source_series(tmp_path):
@@ -361,6 +376,41 @@ def test_seg_validator_rejects_missing_source_instance_reference(tmp_path):
     dataset.save_as(seg_path, enforce_file_format=True)
 
     with pytest.raises(ValueError, match="missing source SOPInstanceUID"):
+        validate_seg_dataset(seg_path, source, "native")
+
+
+def test_seg_validator_rejects_duplicate_per_frame_source_reference(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source = _write_pet_dicom_series(source_dir, series_uid="1.2.3")
+    seg_path = tmp_path / "native.dcm"
+    _write_seg_dataset(seg_path, source)
+    dataset = pydicom.dcmread(seg_path)
+    duplicate_uid = dataset.PerFrameFunctionalGroupsSequence[0].DerivationImageSequence[
+        0
+    ].SourceImageSequence[0].ReferencedSOPInstanceUID
+    dataset.PerFrameFunctionalGroupsSequence[1].DerivationImageSequence[
+        0
+    ].SourceImageSequence[0].ReferencedSOPInstanceUID = duplicate_uid
+    dataset.save_as(seg_path, enforce_file_format=True)
+
+    with pytest.raises(ValueError, match="per-frame source references"):
+        validate_seg_dataset(seg_path, source, "native")
+
+
+def test_seg_validator_rejects_wrong_referenced_sop_class(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source = _write_pet_dicom_series(source_dir, series_uid="1.2.3")
+    seg_path = tmp_path / "native.dcm"
+    _write_seg_dataset(seg_path, source)
+    dataset = pydicom.dcmread(seg_path)
+    dataset.PerFrameFunctionalGroupsSequence[0].DerivationImageSequence[
+        0
+    ].SourceImageSequence[0].ReferencedSOPClassUID = CTImageStorage
+    dataset.save_as(seg_path, enforce_file_format=True)
+
+    with pytest.raises(ValueError, match="ReferencedSOPClassUID"):
         validate_seg_dataset(seg_path, source, "native")
 
 
