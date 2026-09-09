@@ -94,7 +94,7 @@ installed inside the container.
 docker run --rm --gpus all --shm-size=2g \
   -v /path/to/data:/shared \
   -v lionz-models:/usr/local/models \
-  lalithshiyam/lionz:1.0.5 \
+  lalithshiyam/lionz:1.0.6 \
   -d /shared -m psma
 ```
 
@@ -108,7 +108,7 @@ On a Slurm cluster with Singularity:
 singularity exec --nv \
   --bind /path/to/data:/shared \
   --bind /path/to/models:/usr/local/models \
-  docker://lalithshiyam/lionz:1.0.5 \
+  docker://lalithshiyam/lionz:1.0.6 \
   lionz -d /shared -m psma
 ```
 
@@ -223,6 +223,28 @@ patient_001/
     └── stats/
         └── patient_001_metrics.csv   # Volume, SUV metrics
 ```
+
+## Standards-compliant DICOM SEG export
+
+`scripts/export_idc_dicom_seg.py` converts an existing LION FDG NIfTI mask
+back onto its original PET DICOM grid and encodes it as a source-referenced
+binary DICOM SEG. This dataset workflow is separate from the normal `lionz`
+inference command because it requires the original PET instances plus pinned
+[dcmqi](https://github.com/QIICR/dcmqi) and dicom3tools containers.
+
+The LMU Slurm workflow is:
+
+```bash
+sbatch --wait scripts/lmu/prepare_dicom_seg_tools.sbatch
+sbatch --wait --export=ALL,MODE=smoke scripts/lmu/export_idc_dicom_seg.sbatch
+sbatch --wait --export=ALL,MODE=full,WORKERS=8 scripts/lmu/export_idc_dicom_seg.sbatch
+```
+
+Every produced object must pass source-UID and coded-metadata checks, zero
+`dciodvfy`/`dcentvfy` errors, and an exact dcmqi SEG-to-mask round trip. Empty
+masks are recorded explicitly and do not produce meaningless empty SEG
+objects. The LUNG-PET-CT-Dx export also checks that every SUV>=4 mask is a
+subset of its corresponding native mask.
 
 ## Platform Support
 
