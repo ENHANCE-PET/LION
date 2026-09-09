@@ -92,44 +92,98 @@ log_files=(
 shopt -u nullglob
 [[ "${#log_files[@]}" -gt 0 ]]
 
-zip -q -r "${TEMP_ARCHIVE}" \
-  results/dicom-seg/native \
-  results/dicom-seg/suv4 \
-  results/dicom-seg/qc \
-  manifest/fdg_pet_selection.csv \
-  qc/segmentation_validation.csv \
-  software/dicom-seg-tools/SHA256SUMS \
-  software/dicom-seg-tools/container_provenance.txt \
-  software/LION-dicom-seg-export/EXPORTER_COMMIT \
-  software/LION-dicom-seg-export/README.md \
-  software/LION-dicom-seg-export/lionz/dicom_seg.py \
-  software/LION-dicom-seg-export/scripts/export_idc_dicom_seg.py \
-  software/LION-dicom-seg-export/scripts/validate_slicer_dicom_seg.py \
-  software/LION-dicom-seg-export/scripts/lmu/prepare_dicom_seg_tools.sbatch \
-  software/LION-dicom-seg-export/scripts/lmu/export_idc_dicom_seg.sbatch \
-  software/LION-dicom-seg-export/scripts/lmu/package_dicom_seg.sbatch \
-  software/LION-dicom-seg-export/scripts/ohif-smoke \
-  "${log_files[@]}"
+"${LION_PY}" - "${TEMP_ARCHIVE}" "${log_files[@]}" <<'PY'
+import pathlib
+import sys
+import zipfile
 
-unzip -tq "${TEMP_ARCHIVE}"
-archive_native=$(unzip -Z1 "${TEMP_ARCHIVE}" | awk '/^results\/dicom-seg\/native\/[^/]+[.]dcm$/ {n++} END {print n+0}')
-archive_suv4=$(unzip -Z1 "${TEMP_ARCHIVE}" | awk '/^results\/dicom-seg\/suv4\/[^/]+[.]dcm$/ {n++} END {print n+0}')
-archive_reports=$(unzip -Z1 "${TEMP_ARCHIVE}" | awk '/^results\/dicom-seg\/qc\/reports\/[^/]+[.]json$/ {n++} END {print n+0}')
-[[ "${archive_native}" -eq 133 ]]
-[[ "${archive_suv4}" -eq 130 ]]
-[[ "${archive_reports}" -eq 266 ]]
+archive = pathlib.Path(sys.argv[1])
+inputs = [
+    pathlib.Path("results/dicom-seg/native"),
+    pathlib.Path("results/dicom-seg/suv4"),
+    pathlib.Path("results/dicom-seg/qc"),
+    pathlib.Path("manifest/fdg_pet_selection.csv"),
+    pathlib.Path("qc/segmentation_validation.csv"),
+    pathlib.Path("software/dicom-seg-tools/SHA256SUMS"),
+    pathlib.Path("software/dicom-seg-tools/container_provenance.txt"),
+    pathlib.Path("software/LION-dicom-seg-export/EXPORTER_COMMIT"),
+    pathlib.Path("software/LION-dicom-seg-export/README.md"),
+    pathlib.Path("software/LION-dicom-seg-export/lionz/dicom_seg.py"),
+    pathlib.Path("software/LION-dicom-seg-export/scripts/export_idc_dicom_seg.py"),
+    pathlib.Path("software/LION-dicom-seg-export/scripts/validate_slicer_dicom_seg.py"),
+    pathlib.Path("software/LION-dicom-seg-export/scripts/lmu/prepare_dicom_seg_tools.sbatch"),
+    pathlib.Path("software/LION-dicom-seg-export/scripts/lmu/export_idc_dicom_seg.sbatch"),
+    pathlib.Path("software/LION-dicom-seg-export/scripts/lmu/package_dicom_seg.sbatch"),
+    pathlib.Path("software/LION-dicom-seg-export/scripts/ohif-smoke"),
+    *(pathlib.Path(value) for value in sys.argv[2:]),
+]
 
-if unzip -Z1 "${TEMP_ARCHIVE}" | grep -Eq '(^|/)(raw|work)(/|$)'; then
-  echo "Archive unexpectedly contains raw data or temporary work files" >&2
-  exit 1
-fi
+seen: set[str] = set()
+with zipfile.ZipFile(
+    archive,
+    mode="w",
+    compression=zipfile.ZIP_DEFLATED,
+    compresslevel=6,
+    allowZip64=True,
+) as output:
+    for item in inputs:
+        files = [item] if item.is_file() else sorted(
+            candidate for candidate in item.rglob("*") if candidate.is_file()
+        )
+        for path in files:
+            name = path.as_posix()
+            if name not in seen:
+                output.write(path, arcname=name)
+                seen.add(name)
+
+with zipfile.ZipFile(archive) as packaged:
+    corrupt = packaged.testzip()
+    if corrupt is not None:
+        raise SystemExit(f"Archive CRC failure: {corrupt}")
+    names = packaged.namelist()
+
+native = sum(
+    name.startswith("results/dicom-seg/native/") and name.endswith(".dcm")
+    for name in names
+)
+suv4 = sum(
+    name.startswith("results/dicom-seg/suv4/") and name.endswith(".dcm")
+    for name in names
+)
+reports = sum(
+    name.startswith("results/dicom-seg/qc/reports/") and name.endswith(".json")
+    for name in names
+)
+if (native, suv4, reports) != (133, 130, 266):
+    raise SystemExit(
+        f"Unexpected archive counts: native={native}, suv4={suv4}, reports={reports}"
+    )
+
+for name in names:
+    parts = pathlib.PurePosixPath(name).parts
+    if "raw" in parts or "work" in parts:
+        raise SystemExit(f"Archive unexpectedly contains intermediate data: {name}")
+
+print(
+    f"Archive CRC and inventory OK: {native} native, {suv4} SUV>=4, "
+    f"{reports} outcome reports"
+)
+PY
 
 mv -f "${TEMP_ARCHIVE}" "${ARCHIVE}"
-(
-  cd "$(dirname "${ARCHIVE}")"
-  sha256sum "$(basename "${ARCHIVE}")" > "$(basename "${ARCHIVE}").sha256"
-)
+"${LION_PY}" - "${ARCHIVE}" <<'PY'
+import hashlib
+import pathlib
+import sys
 
-ls -lh "${ARCHIVE}" "${ARCHIVE}.sha256"
-cat "${ARCHIVE}.sha256"
+archive = pathlib.Path(sys.argv[1])
+digest = hashlib.sha256()
+with archive.open("rb") as source:
+    for block in iter(lambda: source.read(1024 * 1024), b""):
+        digest.update(block)
+sidecar = archive.with_name(f"{archive.name}.sha256")
+sidecar.write_text(f"{digest.hexdigest()}  {archive.name}\n")
+print(f"{archive.stat().st_size} bytes  {archive}")
+print(sidecar.read_text(), end="")
+PY
 date -Is
