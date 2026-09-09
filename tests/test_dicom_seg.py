@@ -398,6 +398,29 @@ def test_seg_validator_rejects_duplicate_per_frame_source_reference(tmp_path):
         validate_seg_dataset(seg_path, source, "native")
 
 
+def test_seg_validator_rejects_swapped_per_frame_source_mapping(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source = _write_pet_dicom_series(source_dir, series_uid="1.2.3")
+    seg_path = tmp_path / "native.dcm"
+    _write_seg_dataset(seg_path, source)
+    dataset = pydicom.dcmread(seg_path)
+    first = dataset.PerFrameFunctionalGroupsSequence[0].DerivationImageSequence[
+        0
+    ].SourceImageSequence[0]
+    second = dataset.PerFrameFunctionalGroupsSequence[1].DerivationImageSequence[
+        0
+    ].SourceImageSequence[0]
+    first.ReferencedSOPInstanceUID, second.ReferencedSOPInstanceUID = (
+        second.ReferencedSOPInstanceUID,
+        first.ReferencedSOPInstanceUID,
+    )
+    dataset.save_as(seg_path, enforce_file_format=True)
+
+    with pytest.raises(ValueError, match="per-frame source order"):
+        validate_seg_dataset(seg_path, source, "native")
+
+
 def test_seg_validator_rejects_wrong_referenced_sop_class(tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()

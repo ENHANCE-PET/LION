@@ -444,6 +444,11 @@ def validate_seg_dataset(
     per_frame_sops = _validate_reference_pairs(
         per_frame_references, source, location="per-frame"
     )
+    per_frame_order = tuple(
+        instance_uid for _, instance_uid in per_frame_references
+    )
+    if per_frame_order != source.sop_instance_uids:
+        raise ValueError("DICOM SEG per-frame source order differs from source DICOM")
     if per_frame_sops != referenced_sops:
         raise ValueError("DICOM SEG top-level and per-frame source references differ")
     if int(dataset.NumberOfFrames) != len(source.sop_instance_uids):
