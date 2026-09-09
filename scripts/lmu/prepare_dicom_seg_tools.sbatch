@@ -41,6 +41,7 @@ sha256sum "${DCMQI_SIF}" "${DICOM3TOOLS_SIF}" > "${TOOL_DIR}/SHA256SUMS"
 } > "${TOOL_DIR}/container_provenance.txt"
 
 singularity exec "${DCMQI_SIF}" sh -c 'command -v itkimage2segimage; command -v segimage2itkimage'
-singularity exec "${DICOM3TOOLS_SIF}" sh -c 'command -v dciodvfy; command -v dcentvfy'
+singularity exec "${DICOM3TOOLS_SIF}" test -x /usr/src/dicom3tools/bin/1.4.4.0.x8664/dciodvfy
+singularity exec "${DICOM3TOOLS_SIF}" test -x /usr/src/dicom3tools/bin/1.4.4.0.x8664/dcentvfy
 touch "${TOOL_DIR}/TOOLS_READY"
 date -Is

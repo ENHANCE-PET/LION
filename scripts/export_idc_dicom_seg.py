@@ -26,6 +26,7 @@ from lionz.dicom_seg import (
 
 
 EMPTY_STATUS = "NO_SEGMENT_ABOVE_THRESHOLD"
+DICOM3TOOLS_BIN = Path("/usr/src/dicom3tools/bin/1.4.4.0.x8664")
 
 
 def _read_csv(path: str | Path) -> list[dict[str, str]]:
@@ -181,6 +182,22 @@ def _singularity_command(
     return [singularity, "exec", str(sif), executable, *(str(item) for item in arguments)]
 
 
+def _dicom3tools_command(
+    singularity: str,
+    sif: str | Path,
+    executable: str,
+    *arguments: str | Path,
+) -> list[str]:
+    if executable not in {"dciodvfy", "dcentvfy"}:
+        raise ValueError(f"Unsupported dicom3tools executable: {executable}")
+    return _singularity_command(
+        singularity,
+        sif,
+        str(DICOM3TOOLS_BIN / executable),
+        *arguments,
+    )
+
+
 def _exact_roundtrip(reference_path: Path, roundtrip_path: Path) -> dict[str, Any]:
     reference = sitk.ReadImage(str(reference_path))
     roundtrip = sitk.ReadImage(str(roundtrip_path))
@@ -326,7 +343,7 @@ def convert_task(
         seg = validate_seg_dataset(temporary_output, source, variant)
         dciodvfy_log = log_dir / f"{patient_id}_{variant}_dciodvfy.log"
         dciodvfy = _run_command(
-            _singularity_command(
+            _dicom3tools_command(
                 singularity, dicom3tools_sif, "dciodvfy", "-new", temporary_output
             ),
             dciodvfy_log,
@@ -340,7 +357,7 @@ def convert_task(
 
         dcentvfy_log = log_dir / f"{patient_id}_{variant}_dcentvfy.log"
         dcentvfy = _run_command(
-            _singularity_command(
+            _dicom3tools_command(
                 singularity,
                 dicom3tools_sif,
                 "dcentvfy",
@@ -448,13 +465,13 @@ def validate_existing_task(
     log_dir = Path(task["validator_log_dir"])
     prefix = f"{task['patient_id']}_{task['variant']}_revalidate"
     dciodvfy = _run_command(
-        _singularity_command(
+        _dicom3tools_command(
             singularity, dicom3tools_sif, "dciodvfy", "-new", task["output_path"]
         ),
         log_dir / f"{prefix}_dciodvfy.log",
     )
     dcentvfy = _run_command(
-        _singularity_command(
+        _dicom3tools_command(
             singularity,
             dicom3tools_sif,
             "dcentvfy",

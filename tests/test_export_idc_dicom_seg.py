@@ -200,3 +200,23 @@ def test_summarize_requires_exact_empty_suv4_records(tmp_path):
 
     assert summary["empty_suv4"] == ["Lung_Dx-A0003"]
 
+
+def test_dicom3tools_command_uses_container_absolute_binary_path():
+    module = _load_script()
+
+    command = module._dicom3tools_command(
+        "singularity",
+        "/tools/dicom3tools.sif",
+        "dciodvfy",
+        "-new",
+        "/output/seg.dcm",
+    )
+
+    assert command == [
+        "singularity",
+        "exec",
+        "/tools/dicom3tools.sif",
+        "/usr/src/dicom3tools/bin/1.4.4.0.x8664/dciodvfy",
+        "-new",
+        "/output/seg.dcm",
+    ]
