@@ -215,6 +215,8 @@ def test_dicom3tools_command_uses_container_absolute_binary_path():
     assert command == [
         "singularity",
         "exec",
+        "--bind",
+        "/data2:/data2",
         "/tools/dicom3tools.sif",
         "/usr/src/dicom3tools/bin/1.4.4.0.x8664/dciodvfy",
         "-new",
@@ -236,3 +238,4 @@ def test_dcmqi_conversion_keeps_empty_source_frames_for_exact_roundtrip():
 
     assert command[-2:] == ["--skip", "0"]
     assert "--skipEmptySlices" not in command
+    assert command[2:4] == ["--bind", "/data2:/data2"]

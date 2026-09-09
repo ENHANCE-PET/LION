@@ -179,7 +179,15 @@ def _singularity_command(
     executable: str,
     *arguments: str | Path,
 ) -> list[str]:
-    return [singularity, "exec", str(sif), executable, *(str(item) for item in arguments)]
+    return [
+        singularity,
+        "exec",
+        "--bind",
+        "/data2:/data2",
+        str(sif),
+        executable,
+        *(str(item) for item in arguments),
+    ]
 
 
 def _dicom3tools_command(
