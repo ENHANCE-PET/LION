@@ -376,11 +376,18 @@ def validate_seg_dataset(
     referenced_sops = _referenced_sop_uids(dataset)
     if not referenced_sops:
         raise ValueError("DICOM SEG contains no source SOPInstanceUID references")
-    unexpected_sops = referenced_sops.difference(source.sop_instance_uids)
+    expected_sops = frozenset(source.sop_instance_uids)
+    unexpected_sops = referenced_sops.difference(expected_sops)
     if unexpected_sops:
         raise ValueError(
             "DICOM SEG references SOPInstanceUID values outside the source series: "
             f"{sorted(unexpected_sops)}"
+        )
+    missing_sops = expected_sops.difference(referenced_sops)
+    if missing_sops:
+        raise ValueError(
+            "DICOM SEG is missing source SOPInstanceUID references: "
+            f"{sorted(missing_sops)}"
         )
 
     if len(dataset.SegmentSequence) != 1:

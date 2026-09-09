@@ -551,6 +551,24 @@ def summarize_reports(
     identities = [(report.get("patient_id"), report.get("variant")) for report in reports]
     if len(identities) != len(set(identities)):
         raise ValueError("Duplicate patient/variant reports found")
+    invalid_variants = sorted(
+        {
+            str(report.get("variant"))
+            for report in reports
+            if report.get("variant") not in {"native", "suv4"}
+        }
+    )
+    if invalid_variants:
+        raise ValueError(f"Unexpected report variant values: {invalid_variants}")
+    invalid_statuses = sorted(
+        {
+            str(report.get("status"))
+            for report in reports
+            if report.get("status") not in {"ok", "error", EMPTY_STATUS}
+        }
+    )
+    if invalid_statuses:
+        raise ValueError(f"Unexpected report status values: {invalid_statuses}")
     failed = [report for report in reports if report.get("status") == "error"]
     if failed:
         raise ValueError(f"Conversion failures found: {failed}")
@@ -571,6 +589,12 @@ def summarize_reports(
             f"native={len(native)}/{expected_native}, suv4={len(suv4)}/{expected_suv4}"
         )
     for report in successful:
+        if report.get("referenced_sop_instances") != report.get(
+            "source_sop_instances"
+        ):
+            raise ValueError(
+                f"Incomplete source references for {report['patient_id']}"
+            )
         geometry = report.get("geometry", {})
         if geometry.get("input_voxels") != geometry.get("output_voxels"):
             raise ValueError(f"Geometry voxel mismatch for {report['patient_id']}")

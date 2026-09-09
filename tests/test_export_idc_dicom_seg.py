@@ -115,6 +115,8 @@ def _write_report(
         "status": "ok",
         "sop_instance_uid": sop_uid,
         "series_instance_uid": series_uid,
+        "source_sop_instances": 2,
+        "referenced_sop_instances": 2,
         "geometry": {"input_voxels": 5, "output_voxels": 5},
         "roundtrip": {"equal": True, "dice": 1.0, "differing_voxels": 0},
         "dciodvfy": {"returncode": 0, "errors": dciodvfy_errors or []},
@@ -199,6 +201,53 @@ def test_summarize_requires_exact_empty_suv4_records(tmp_path):
     )
 
     assert summary["empty_suv4"] == ["Lung_Dx-A0003"]
+
+
+def test_summarize_rejects_missing_source_instance_references(tmp_path):
+    module = _load_script()
+    report_dir = tmp_path / "qc" / "reports"
+    _write_report(
+        report_dir,
+        patient="Lung_Dx-A0001",
+        variant="native",
+        sop_uid="1.2.3.1",
+        series_uid="1.2.4.1",
+    )
+    path = report_dir / "Lung_Dx-A0001_native.json"
+    report = json.loads(path.read_text())
+    report["referenced_sop_instances"] = 1
+    path.write_text(json.dumps(report))
+
+    with pytest.raises(ValueError, match="source references"):
+        module.summarize_reports(
+            report_dir=report_dir,
+            expected_native=1,
+            expected_suv4=0,
+            expected_empty_suv4=[],
+        )
+
+
+def test_summarize_rejects_unknown_report_status(tmp_path):
+    module = _load_script()
+    report_dir = tmp_path / "qc" / "reports"
+    report_dir.mkdir(parents=True)
+    (report_dir / "Lung_Dx-A0001_native.json").write_text(
+        json.dumps(
+            {
+                "patient_id": "Lung_Dx-A0001",
+                "variant": "native",
+                "status": "skipped",
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="Unexpected report status"):
+        module.summarize_reports(
+            report_dir=report_dir,
+            expected_native=0,
+            expected_suv4=0,
+            expected_empty_suv4=[],
+        )
 
 
 def test_dicom3tools_command_uses_container_absolute_binary_path():

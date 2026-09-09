@@ -350,6 +350,20 @@ def test_seg_validator_rejects_wrong_source_series(tmp_path):
         validate_seg_dataset(seg_path, source, "native")
 
 
+def test_seg_validator_rejects_missing_source_instance_reference(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source = _write_pet_dicom_series(source_dir, series_uid="1.2.3")
+    seg_path = tmp_path / "native.dcm"
+    _write_seg_dataset(seg_path, source)
+    dataset = pydicom.dcmread(seg_path)
+    dataset.ReferencedSeriesSequence[0].ReferencedInstanceSequence.pop()
+    dataset.save_as(seg_path, enforce_file_format=True)
+
+    with pytest.raises(ValueError, match="missing source SOPInstanceUID"):
+        validate_seg_dataset(seg_path, source, "native")
+
+
 def test_validator_parsers_treat_errors_as_fatal_but_retain_warnings():
     text = "Warning - retained for QC\nError - missing attribute\n"
 
