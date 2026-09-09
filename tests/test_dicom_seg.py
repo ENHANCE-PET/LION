@@ -1,4 +1,5 @@
 import numpy as np
+from pathlib import Path
 from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
 from pydicom.sequence import Sequence
 from pydicom.uid import (
@@ -9,6 +10,8 @@ from pydicom.uid import (
 )
 import pytest
 import SimpleITK as sitk
+import subprocess
+import sys
 
 from lionz.dicom_seg import (
     SourceSeries,
@@ -21,6 +24,23 @@ from lionz.dicom_seg import (
     uid_from_key,
     validate_seg_dataset,
 )
+
+
+def test_dicom_seg_import_does_not_load_inference_dependencies():
+    repository = Path(__file__).parents[1]
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import lionz.dicom_seg; assert 'cv2' not in sys.modules",
+        ],
+        cwd=repository,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def _reference_image() -> sitk.Image:
