@@ -94,7 +94,7 @@ installed inside the container.
 docker run --rm --gpus all --shm-size=2g \
   -v /path/to/data:/shared \
   -v lionz-models:/usr/local/models \
-  lalithshiyam/lionz:1.0.6 \
+  lalithshiyam/lionz:1.0.7 \
   -d /shared -m psma
 ```
 
@@ -108,7 +108,7 @@ On a Slurm cluster with Singularity:
 singularity exec --nv \
   --bind /path/to/data:/shared \
   --bind /path/to/models:/usr/local/models \
-  docker://lalithshiyam/lionz:1.0.6 \
+  docker://lalithshiyam/lionz:1.0.7 \
   lionz -d /shared -m psma
 ```
 
