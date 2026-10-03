@@ -15,6 +15,7 @@ from typing import Generator
 
 from rich import box
 from rich.console import Console
+from rich.panel import Panel
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.style import Style
 from rich.table import Table
@@ -65,6 +66,37 @@ def print_version(version: str, console: Console) -> None:
     t.append(BRAND, style=f"bold {CORAL}")
     t.append(f"  v{version}", style=MUTED)
     console.print(t)
+
+
+# ── Citation ─────────────────────────────────────────────────────
+
+
+def print_citation(console: Console) -> None:
+    """Print the manuscript citation in a compact, wrapping panel."""
+    doi_url = "https://doi.org/10.2967/jnumed.126.272852"
+    citation = Text()
+    citation.append(
+        "Fully Automated Segmentation of [18F]FDG and [68Ga]/[18F]PSMA\n"
+        "PET/CT Images via Data-Centric Deep Learning\n\n",
+        style="bold",
+    )
+    citation.append(
+        "Manuel Pires · Sebastian Gutschmayer · Lalith Kumar Shiyam Sundar, et al.\n"
+    )
+    citation.append("Journal of Nuclear Medicine · September 2026\n", style=MUTED)
+    citation.append(doi_url, style=f"{CORAL} link {doi_url}")
+
+    console.print(
+        Panel(
+            citation,
+            title=Text("Citation", style=f"bold {CORAL}"),
+            title_align="left",
+            box=box.ROUNDED,
+            border_style=GREIGE,
+            padding=(1, 2),
+            width=88,
+        )
+    )
 
 
 # ── Section headers ──────────────────────────────────────────────

@@ -142,7 +142,7 @@ class OutputManager:
 
     def display_citation(self):
         """Display citation information."""
-        self.console.print(f"  [reverse {theme.GREIGE}] Citation [/reverse {theme.GREIGE}] [{theme.MUTED}]Pires, Gutschmayer, Shiyam Sundar et al. · 10.5281/zenodo.12626789[/{theme.MUTED}]")
+        theme.print_citation(self.console)
 
     def create_table(self, header: list[str], styles: list[str] | None = None):
         """Create a styled table."""
