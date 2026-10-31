@@ -15,6 +15,8 @@ runtime migration from 1.0.7.
   upgrades preserve the previous cache; installation failures roll back.
 - Constrains MCP plan source/destination paths and prevents output overwrites.
 - Removes the dormant Windows helper's broad executable write permission grant.
+- Transfers release tags through an environment variable before Bash validation,
+  preventing release/dispatch tag text from executing shell commands.
 
 ## Upgrade and compatibility
 
@@ -36,7 +38,7 @@ mount. A failed refresh preserves existing weights and reports an error.
 
 ## Validation and remaining gate
 
-The complete candidate suite passed 72 tests, including explicit CUDA-index/wheel
+The complete candidate suite passed 74 tests, including explicit CUDA-index/wheel
 selection and safe Apple archive metadata handling. The built 1.1.0 wheel was
 installed and tested outside the source checkout: its console help, public API
 signature, invalid-input handling, version metadata, nnUNet CPU predictor
@@ -45,6 +47,10 @@ wheel and source distribution built successfully and passed `twine check`.
 The test environment uses the locked macOS inference stack; build-tool installation
 upgraded the auxiliary `rich`/`packaging` packages to 15.0.0/26.3. The earlier
 70-test security suite also passed with the exact locked 14.2.0/25.0 versions.
+
+The `Test Locked Runtime` pull-request workflow runs the complete locked suite
+on Python 3.12/Linux without publication credentials. Its result must pass before
+merging; local YAML/Bash syntax and real Bash release-tag regressions passed.
 
 These checks do not establish unchanged segmentation output on a GPU. The Docker
 candidate must pass the existing LMU B200 exact-output test and produce its

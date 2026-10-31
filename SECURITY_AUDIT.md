@@ -24,6 +24,11 @@ downloaded or added. The security branch is prepared for the separately authoriz
   connection/read timeouts. Existing caches remain intact until replacement
   validation finishes; installation backs up the previous cache and rolls back
   on failure. A backup is retained if rollback itself fails.
+- Release and manual-dispatch tags are transferred through an environment
+  variable before Bash validation. Real Bash regressions reproduce and prevent
+  pre-validation command substitution, and verify valid tags still produce the
+  expected version metadata. New pull-request CI runs the locked full suite on
+  Python 3.12/Linux with read-only permissions and no publication secrets.
 - The dormant Windows permission helper no longer grants `Everyone` full control
   over an executable. No active executable download/cache path calls this helper;
   pre-existing filesystem ACLs are not repaired by this change.
@@ -42,7 +47,7 @@ first as shown in the README. This replaces the previous CUDA 12.4 contract.
 
 Completed final checks:
 
-- Full release-candidate suite: **72 passed** on macOS/Python 3.13; 10 upstream
+- Full release-candidate suite: **74 passed** on macOS/Python 3.13; 10 upstream
   SWIG/SciPy deprecation warnings were observed. The installed inference stack
   matches the root lock. Build-tool installation upgraded auxiliary rich/packaging
   to 15.0.0/26.3; the earlier 70-test suite also passed with the exact locked
