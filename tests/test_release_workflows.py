@@ -35,4 +35,57 @@ def test_release_runtime_uses_a_torch_supported_python_version():
     pyproject = (PROJECT_ROOT / "pyproject.toml").read_text()
 
     assert 'python-version: "3.12"' in workflow
-    assert 'requires-python = ">=3.10,<3.14"' in pyproject
+    assert 'requires-python = ">=3.11,<3.14"' in pyproject
+
+
+def release_metadata_script(event: str, tag: str) -> str:
+    import yaml
+
+    workflow = yaml.safe_load(workflow_text("release-publish.yml"))
+    script = workflow["jobs"]["release-meta"]["steps"][0]["run"]
+    # Reproduce GitHub expression substitution for the old unsafe workflow too.
+    replacements = {
+        "github.event_name": event,
+        "github.event.release.tag_name": tag if event == "release" else "",
+        "github.event.inputs.tag": tag if event == "workflow_dispatch" else "",
+    }
+    for expression, value in replacements.items():
+        script = script.replace("${{ " + expression + " }}", value)
+    return script
+
+
+def test_release_and_dispatch_payloads_cannot_execute_shell(tmp_path):
+    import os
+    import shlex
+    import subprocess
+
+    for event in ("release", "workflow_dispatch"):
+        marker = tmp_path / f"{event}-executed"
+        tag = f"$(touch {shlex.quote(str(marker))})"
+        environment = {
+            **os.environ,
+            "RELEASE_TAG": tag,
+            "GITHUB_OUTPUT": str(tmp_path / "output"),
+        }
+        result = subprocess.run(
+            ["bash", "-c", release_metadata_script(event, tag)],
+            env=environment, capture_output=True, text=True, timeout=5,
+        )
+        assert result.returncode != 0
+        assert not marker.exists(), result.stderr
+
+
+def test_valid_release_and_dispatch_tags_generate_expected_metadata(tmp_path):
+    import os
+    import subprocess
+
+    tag = "lionz-v.1.1.0"
+    for event in ("release", "workflow_dispatch"):
+        output = tmp_path / event
+        result = subprocess.run(
+            ["bash", "-c", release_metadata_script(event, tag)],
+            env={**os.environ, "RELEASE_TAG": tag, "GITHUB_OUTPUT": str(output)},
+            capture_output=True, text=True, timeout=5,
+        )
+        assert result.returncode == 0, result.stderr
+        assert output.read_text() == "tag=lionz-v.1.1.0\nversion=1.1.0\n"

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=84.1.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lionz"
-version = "1.0.7"
+version = "1.1.0"
 description = "A toolkit for precise segmentation of tumors in PET/CT scans."
 readme = "README.md"
 license = "Apache-2.0"
@@ -29,7 +29,7 @@ dependencies = [
     "halo",
     "pandas",
     "SimpleITK",
-    "pydicom>=2.4.5",
+    "pydicom>=3.0.2",
     "imageio",
     "numpy",
     "matplotlib",
@@ -37,7 +37,7 @@ dependencies = [
     "cfonts",
     "rich-click",
     "natsort",
-    "pillow>=12.2.0",
+    "pillow>=13.0.0",
     "colorama",
     "dask[distributed]>=2026.1.0",
     "rich",
@@ -45,10 +45,19 @@ dependencies = [
     "emoji",
     "requests>=2.33.0",
     "opencv-python",
-    "torch==2.6.0",
-    "torchvision==0.21.0"
+    # Security floors also protect installations resolved without uv.lock.
+    "anyio>=4.14.2",
+    "certifi>=2026.10.18",
+    "filelock>=4.2.1",
+    "fsspec>=2026.6.0",
+    "msgpack>=1.2.3",
+    "setuptools>=84.1.0",
+    "tornado>=6.6",
+    "urllib3>=2.8.0",
+    "torch==2.13.0",
+    "torchvision==0.28.0"
 ]
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 license-files = ["LICENSE"]
 
 [project.scripts]
@@ -61,8 +70,19 @@ Documentation = "https://lionz.readthedocs.io/en/latest/"
 Source = "https://github.com/ENHANCE-PET/LION"
 
 [dependency-groups]
-dev = ["pytest==9.1.1"]
+dev = ["pytest==9.1.1", "mcp>=1.30.0,<2"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["lionz*"]
+
+# Keep the patched inference runtime on CUDA 12.6 for locked Linux/Windows
+# installations. Explicit indexing prevents other packages using this registry.
+[tool.uv.sources]
+torch = { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
+torchvision = { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true

@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://pypi.org/project/lionz/"><img alt="PyPI" src="https://img.shields.io/pypi/v/lionz.svg?label=PyPI&style=flat-square&logo=python&logoColor=white&color=E87461"></a>
   <a href="https://zenodo.org/badge/latestdoi/685935027"><img alt="DOI" src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.12626789-B5A89A?style=flat-square&labelColor=282a36&logo=zenodo&logoColor=white"></a>
-  <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-E87461?style=flat-square&logo=python&logoColor=white"></a>
+  <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.11%2B-E87461?style=flat-square&logo=python&logoColor=white"></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0"><img alt="License" src="https://img.shields.io/badge/License-Apache--2.0-B5A89A?style=flat-square&logo=apache&logoColor=white"></a>
   <a href="https://pepy.tech/project/lionz"><img alt="Downloads" src="https://img.shields.io/pepy/dt/lionz?style=flat-square&color=E87461&label=Downloads"></a>
   <a href="https://pypistats.org/packages/lionz"><img alt="Monthly" src="https://img.shields.io/pypi/dm/lionz?style=flat-square&color=B5A89A&label=Monthly"></a>
@@ -28,7 +28,7 @@ That's it. Models download automatically on first run.
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - 32GB RAM recommended
 - GPU optional (NVIDIA CUDA or Apple Silicon MPS) - CPU works but slower
 
@@ -86,15 +86,35 @@ python -m pip install lionz
 
 ### Docker with NVIDIA GPUs
 
-The LION Docker image targets CUDA 12.4 and requires NVIDIA driver
-550.54.14 or newer on Linux. The host supplies the NVIDIA driver; it is not
-installed inside the container.
+The LION Docker image targets CUDA 12.6. Use NVIDIA driver
+560.28.03 or newer on Linux as the full CUDA 12.6 baseline. The host supplies the NVIDIA driver; it is not
+installed inside the container. Locked `uv` installations on Linux and Windows
+use the official PyTorch CUDA 12.6 index. Plain `pip install lionz` uses PyPI's
+Torch build, which currently targets CUDA 13.0 on Linux and needs a compatible
+580-series driver. To select CUDA 12.6 with pip, install the matching runtime first:
+
+```bash
+python -m pip install "torch==2.13.0" "torchvision==0.28.0" --index-url https://download.pytorch.org/whl/cu126
+python -m pip install "lionz==1.1.0"
+```
+
+CUDA 12.6's driver guidance is in the [NVIDIA release notes](https://docs.nvidia.com/cuda/archive/12.6.0/cuda-toolkit-release-notes/index.html).
+The [official PyTorch installation matrix](https://pytorch.org/get-started/previous-versions/#v2130)
+lists this patched CUDA 12.6 runtime. GPU inference must be validated on the target
+hardware before promoting a Docker candidate. NVIDIA also documents limited
+CUDA 12.x minor-version compatibility on older drivers; this is not the validated
+LION deployment baseline.
+
+When upgrading an existing model cache, run once with a writable model volume so
+LION can fetch and verify the pinned archive. The updated cache can then be mounted
+read-only. Failed verification or installation preserves the previous cache and
+raises an error.
 
 ```bash
 docker run --rm --gpus all --shm-size=2g \
   -v /path/to/data:/shared \
   -v lionz-models:/usr/local/models \
-  lalithshiyam/lionz:1.0.7 \
+  lalithshiyam/lionz:1.1.0 \
   -d /shared -m psma
 ```
 
@@ -108,7 +128,7 @@ On a Slurm cluster with Singularity:
 singularity exec --nv \
   --bind /path/to/data:/shared \
   --bind /path/to/models:/usr/local/models \
-  docker://lalithshiyam/lionz:1.0.7 \
+  docker://lalithshiyam/lionz:1.1.0 \
   lionz -d /shared -m psma
 ```
 

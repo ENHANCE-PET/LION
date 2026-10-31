@@ -1,7 +1,7 @@
 """Verify the CUDA runtime contract baked into the LION Docker image."""
 
-EXPECTED_TORCH_VERSION = "2.6.0"
-EXPECTED_CUDA_VERSION = "12.4"
+EXPECTED_TORCH_VERSION = "2.13.0"
+EXPECTED_CUDA_VERSION = "12.6"
 
 
 def verify_runtime(torch_module) -> None:

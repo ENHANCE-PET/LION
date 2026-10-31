@@ -1,0 +1,40 @@
+name: Test Locked Runtime
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LIONZ_TELEMETRY: "0"
+      UV_NO_CACHE: "1"
+      UV_LINK_MODE: copy
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv
+        run: python -m pip install "uv==0.9.22"
+
+      - name: Install locked runtime
+        run: uv sync --locked
+
+      - name: Run complete synthetic test suite
+        run: uv run --locked pytest -q
