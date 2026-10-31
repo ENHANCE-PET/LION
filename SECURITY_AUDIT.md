@@ -36,12 +36,13 @@ selects CUDA 13.0; runtime checks, release promotion, and the README match this
 requirement. Linux GPU deployment requires an NVIDIA 580-series compatible
 driver (README minimum 580.65.06). This replaces the previous CUDA 12.4 contract.
 
-Completed checks before the final cache-preservation review:
+Completed final checks:
 
-- Full repository suite: **66 passed** on macOS/Python 3.13 with the locked runtime
-  dependencies installed; upstream SWIG deprecation warnings were observed.
+- Full repository suite: **70 passed** on macOS/Python 3.13 with the locked runtime
+  dependencies installed; 10 upstream SWIG/SciPy deprecation warnings were observed.
 - Root and standalone MCP locked dependency exports: **zero known
-  vulnerabilities** in separate `pip-audit` reports. These package scans evaluate
+  vulnerabilities** in refreshed `pip-audit` reports (105 root packages and 34 MCP
+  packages, none skipped). These package scans evaluate
   the host-applicable markers; they do not certify Linux CUDA wheels or Debian
   packages.
 - Both regenerated lockfiles pass `uv lock --check` after pydicom floors were
@@ -50,10 +51,7 @@ Completed checks before the final cache-preservation review:
   checksum validation, and installation preserving a legacy cache. Each of these
   three regressions failed before the cache-preservation fix.
 - Independent review approved the final cache replacement and dependency floors.
-
-Final full-suite execution and refreshed audit reports are being collected by the
-coordinating audit process; the counts above identify the checks actually
-completed at report-writing time.
+- Root and standalone MCP source distributions and wheels build successfully.
 
 ## Limits
 
