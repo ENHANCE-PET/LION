@@ -35,4 +35,4 @@ def test_release_runtime_uses_a_torch_supported_python_version():
     pyproject = (PROJECT_ROOT / "pyproject.toml").read_text()
 
     assert 'python-version: "3.12"' in workflow
-    assert 'requires-python = ">=3.10,<3.14"' in pyproject
+    assert 'requires-python = ">=3.11,<3.14"' in pyproject

@@ -161,7 +161,7 @@ jobs:
             --entrypoint python \
             --env EXPECTED_LIONZ_VERSION="$LIONZ_VERSION" \
             "$source" \
-            -c 'import importlib.metadata as metadata, os, torch; assert metadata.version("lionz") == os.environ["EXPECTED_LIONZ_VERSION"]; assert torch.__version__.split("+", 1)[0] == "2.6.0"; assert torch.version.cuda == "12.4"'
+            -c 'import importlib.metadata as metadata, os, torch; assert metadata.version("lionz") == os.environ["EXPECTED_LIONZ_VERSION"]; assert torch.__version__.split("+", 1)[0] == "2.13.0"; assert torch.version.cuda == "13.0"'
 
       - name: Promote the tested digest without rebuilding
         env:

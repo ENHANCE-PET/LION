@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://pypi.org/project/lionz/"><img alt="PyPI" src="https://img.shields.io/pypi/v/lionz.svg?label=PyPI&style=flat-square&logo=python&logoColor=white&color=E87461"></a>
   <a href="https://zenodo.org/badge/latestdoi/685935027"><img alt="DOI" src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.12626789-B5A89A?style=flat-square&labelColor=282a36&logo=zenodo&logoColor=white"></a>
-  <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-E87461?style=flat-square&logo=python&logoColor=white"></a>
+  <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/Python-3.11%2B-E87461?style=flat-square&logo=python&logoColor=white"></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0"><img alt="License" src="https://img.shields.io/badge/License-Apache--2.0-B5A89A?style=flat-square&logo=apache&logoColor=white"></a>
   <a href="https://pepy.tech/project/lionz"><img alt="Downloads" src="https://img.shields.io/pepy/dt/lionz?style=flat-square&color=E87461&label=Downloads"></a>
   <a href="https://pypistats.org/packages/lionz"><img alt="Monthly" src="https://img.shields.io/pypi/dm/lionz?style=flat-square&color=B5A89A&label=Monthly"></a>
@@ -28,7 +28,7 @@ That's it. Models download automatically on first run.
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - 32GB RAM recommended
 - GPU optional (NVIDIA CUDA or Apple Silicon MPS) - CPU works but slower
 
@@ -86,8 +86,8 @@ python -m pip install lionz
 
 ### Docker with NVIDIA GPUs
 
-The LION Docker image targets CUDA 12.4 and requires NVIDIA driver
-550.54.14 or newer on Linux. The host supplies the NVIDIA driver; it is not
+The LION Docker image targets CUDA 13.0 and requires NVIDIA driver
+580.65.06 or newer on Linux. The host supplies the NVIDIA driver; it is not
 installed inside the container.
 
 ```bash

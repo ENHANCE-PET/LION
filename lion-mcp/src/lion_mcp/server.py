@@ -315,6 +315,32 @@ def read_dicom_header(filepath: str, include_private_tags: bool = False) -> str:
         return json.dumps({"error": str(e)})
 
 
+def _plan_component(value: str) -> str:
+    """A plan controls names, never directory traversal or drive paths."""
+    if (not isinstance(value, str) or not value or value.endswith((" ", "."))
+            or any(char in value for char in ("/", "\\", ":", "\0"))):
+        raise ValueError("Plan names must be a single non-empty path component")
+    return value
+
+
+def _organization_paths(plan: dict, source_root: Path, target_root: Path) -> None:
+    """Validate the complete untrusted plan before making any changes."""
+    if not isinstance(plan, dict) or not isinstance(plan.get("subjects", []), list):
+        raise ValueError("Plan must contain a subjects list")
+    for subject in plan.get("subjects", []):
+        subject_name = _plan_component(subject.get("subject_id", "unknown"))
+        subject_path = target_root / subject_name
+        if subject_path.is_symlink() or not subject_path.resolve().is_relative_to(target_root):
+            raise ValueError("Subject directory escapes the target directory")
+        for file_spec in subject.get("files", []):
+            _plan_component(file_spec.get("target_name", ""))
+            source = Path(file_spec.get("source", ""))
+            if not source.is_absolute():
+                source = source_root / source
+            if not source.resolve().is_relative_to(source_root):
+                raise ValueError("Source file escapes source_dir")
+
+
 @mcp.tool()
 def organize_for_lion(
     source_dir: str,
@@ -369,7 +395,14 @@ def organize_for_lion(
     except json.JSONDecodeError as e:
         return json.dumps({"error": f"Invalid JSON in organization_plan: {e}"})
 
-    target_path = Path(target_dir)
+    try:
+        source_path = Path(source_dir).resolve(strict=True)
+        target_path = Path(target_dir).resolve()
+        if not source_path.is_dir():
+            raise ValueError("source_dir must be a directory")
+        _organization_paths(plan, source_path, target_path)
+    except (ValueError, OSError, TypeError, AttributeError) as exc:
+        return json.dumps({"success": False, "errors": [str(exc)]})
     target_path.mkdir(parents=True, exist_ok=True)
 
     results = {
@@ -391,6 +424,9 @@ def organize_for_lion(
 
         for file_spec in subject.get("files", []):
             source = Path(file_spec.get("source", ""))
+            if not source.is_absolute():
+                source = source_path / source
+            source = source.resolve()
             target_name = file_spec.get("target_name", "")
             modality = file_spec.get("modality", "")
 
@@ -417,10 +453,14 @@ def organize_for_lion(
                     )
                     continue
 
-                if copy_files:
-                    shutil.copy2(source, target_file)
-                else:
-                    shutil.move(source, target_file)
+                # Exclusive creation rejects existing files, including symlinks.
+                # Copy before unlinking even for moves, so a rejected plan cannot
+                # remove the original or overwrite another subject's data.
+                with source.open("rb") as input_file, target_file.open("xb") as output_file:
+                    shutil.copyfileobj(input_file, output_file)
+                shutil.copystat(source, target_file)
+                if not copy_files:
+                    source.unlink()
 
                 subject_result["files_organized"].append({
                     "source": str(source),

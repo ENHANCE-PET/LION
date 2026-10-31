@@ -37,15 +37,15 @@ def torch_runtime(torch_version: str, cuda_version: str | None):
 def test_validator_accepts_the_supported_cuda_runtime():
     validator = load_runtime_validator()
 
-    validator.verify_runtime(torch_runtime("2.6.0+cu124", "12.4"))
+    validator.verify_runtime(torch_runtime("2.13.0+cu130", "13.0"))
 
 
 @pytest.mark.parametrize(
     ("torch_version", "cuda_version"),
     [
         ("2.9.0+cu128", "12.8"),
-        ("2.6.0+cu124", "12.8"),
-        ("2.6.0", None),
+        ("2.13.0+cu130", "12.8"),
+        ("2.13.0", None),
     ],
 )
 def test_validator_rejects_an_unsupported_cuda_runtime(
@@ -54,7 +54,7 @@ def test_validator_rejects_an_unsupported_cuda_runtime(
 ):
     validator = load_runtime_validator()
 
-    with pytest.raises(RuntimeError, match="Expected Torch 2.6.0 with CUDA 12.4"):
+    with pytest.raises(RuntimeError, match="Expected Torch 2.13.0 with CUDA 13.0"):
         validator.verify_runtime(torch_runtime(torch_version, cuda_version))
 
 

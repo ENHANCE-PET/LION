@@ -2,7 +2,11 @@ import os
 import json
 import zipfile
 import requests
-import shutil 
+import shutil
+import hashlib
+import stat
+import tempfile
+from pathlib import Path, PurePosixPath
 from lionz import system
 from lionz.constants import (
     KEY_FOLDER_NAME,
@@ -27,6 +31,7 @@ MODEL_METADATA = {
     "psma": {
         KEY_URL: "https://github.com/ENHANCE-PET/LION/releases/download/lionz-v.1.0.0/clin_pt_psma_2046_25112025.zip",
         KEY_FOLDER_NAME: "Dataset711_PSMA",
+        "sha256": "3082cc95290a69ddd5c05a3fabcd573f5b45fb9dbf6ec1ccbc467acee2c0e3ee",
         TUMOR_LABEL: 6,
         KEY_IMAGING_TYPE: "clinical",
         KEY_MODALITY: "PT",
@@ -37,6 +42,7 @@ MODEL_METADATA = {
     "fdg": {
         KEY_URL: "https://github.com/ENHANCE-PET/LION/releases/download/lionz-v.1.0.3/clin_pt_fdg_5209_27032026.zip",
         KEY_FOLDER_NAME: "Dataset789_Tumors",
+        "sha256": "e912620a316a4b35bef92912a3524715777da72dfb1de66951e75f21f5d44496",
         TUMOR_LABEL: 11,
         KEY_IMAGING_TYPE: "clinical",
         KEY_MODALITY: "PT",
@@ -54,6 +60,7 @@ class Model:
         self.model_identifier = model_identifier
         self.folder_name = MODEL_METADATA[self.model_identifier][KEY_FOLDER_NAME]
         self.url = MODEL_METADATA[self.model_identifier][KEY_URL]
+        self.sha256 = MODEL_METADATA[self.model_identifier]["sha256"]
         self.tumor_label = MODEL_METADATA[self.model_identifier][TUMOR_LABEL]
         self.limit_fov = False
         self.base_directory = base_directory or system.MODELS_DIRECTORY_PATH
@@ -124,24 +131,25 @@ class Model:
         or if the existing folder has a different URL recorded.
         """
 
-        # If folder already exists, check if we should remove it
+        # Reuse only caches carrying the expected URL and verified digest.
         if os.path.exists(self.directory):
             # Attempt to load the previously saved URL from version file
             version_file_path = os.path.join(self.directory, "model_version.json")
             old_url = None
+            old_digest = None
 
             if os.path.exists(version_file_path):
                 try:
                     with open(version_file_path, 'r') as vf:
                         version_data = json.load(vf)
                         old_url = version_data.get("url")
+                        old_digest = version_data.get("sha256")
                 except Exception:
                     pass  # If JSON is corrupted, we'll just treat it as mismatch
 
-            # If the existing folder's URL doesn't match the new URL, remove folder
-            if old_url != self.url:
+            # Preserve an old cache until its replacement has fully validated.
+            if old_url != self.url or old_digest != self.sha256:
                 output_manager.warn(f"Model version mismatch for '{self.model_identifier}', downloading latest...")
-                shutil.rmtree(self.directory, ignore_errors=True)
             else:
                 # If the URL matches, we skip re-downloading
                 output_manager.log_update(
@@ -150,7 +158,7 @@ class Model:
                 output_manager.ok(f"{self.model_identifier.upper()} · Ready")
                 return
 
-        # If folder doesn't exist or has been removed, proceed to download
+        # Stage a replacement without modifying the current model.
         if not os.path.exists(self.base_directory):
             os.makedirs(self.base_directory)
 
@@ -158,48 +166,64 @@ class Model:
             raise ValueError(f" No URL specified for model '{self.model_identifier}'.")
 
         output_manager.log_update(f"    - Downloading {self.model_identifier}")
-        download_file_name = os.path.basename(self.url)
-        download_file_path = os.path.join(self.base_directory, download_file_name)
+        # A private temporary directory prevents planted download/extraction
+        # symlinks in a shared model cache from redirecting writes.
+        with tempfile.TemporaryDirectory(prefix=".lionz-model-", dir=self.base_directory) as staging:
+            download_file_path = Path(staging) / "model.zip"
+            digest = hashlib.sha256()
+            with requests.get(self.url, stream=True, timeout=(10, 300)) as response:
+                response.raise_for_status()
+                total_size = int(response.headers.get("Content-Length", 0))
+                progress = output_manager.create_file_progress_bar()
+                with progress:
+                    task = progress.add_task(f"[white] Downloading {self.model_identifier}...", total=total_size)
+                    with download_file_path.open("xb") as output_file:
+                        for chunk in response.iter_content(chunk_size=1024 * 1024):
+                            if chunk:
+                                digest.update(chunk)
+                                output_file.write(chunk)
+                                progress.update(task, advance=len(chunk))
+            if digest.hexdigest() != self.sha256:
+                raise ValueError(f"SHA-256 mismatch for model '{self.model_identifier}'")
 
-        response = requests.get(self.url, stream=True)
-        if response.status_code != 200:
-            output_manager.log_update(f"    X Failed to download model from {self.url}")
-            raise Exception(f" Failed to download model from {self.url}")
+            extraction_path = Path(staging) / "extracted"
+            with zipfile.ZipFile(download_file_path) as archive:
+                # Validate every member before writing any archive content.
+                for member in archive.infolist():
+                    path = PurePosixPath(member.filename)
+                    mode = member.external_attr >> 16
+                    if (path.is_absolute() or ".." in path.parts
+                            or not path.parts or path.parts[0] != self.folder_name
+                            or "\\" in member.filename or ":" in member.filename
+                            or stat.S_ISLNK(mode)):
+                        raise ValueError(f"Unsafe model archive member: {member.filename}")
+                archive.extractall(extraction_path)
+            staged_model = extraction_path / self.folder_name
+            if not staged_model.is_dir():
+                raise ValueError("Model archive does not contain the expected directory")
+            # Write the verification marker before exposing the new cache.
+            with (staged_model / "model_version.json").open("w") as version_file:
+                json.dump({"url": self.url, "sha256": self.sha256}, version_file)
 
-        total_size = int(response.headers.get("Content-Length", 0))
-        chunk_size = 1024 * 10
-
-        progress = output_manager.create_file_progress_bar()
-        with progress:
-            task = progress.add_task(f"[white] Downloading {self.model_identifier}...", total=total_size)
-            with open(download_file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        progress.update(task, advance=chunk_size)
-
-        output_manager.log_update(
-            f"    - {self.model_identifier} ({self.folder_name}) downloaded."
-        )
-
-        # Extract
-        progress = output_manager.create_file_progress_bar()
-        with progress:
-            with zipfile.ZipFile(download_file_path, 'r') as zip_ref:
-                total_size = sum(file.file_size for file in zip_ref.infolist())
-                task = progress.add_task(f"[white] Extracting {self.model_identifier}...", total=total_size)
-                for file in zip_ref.infolist():
-                    zip_ref.extract(file, self.base_directory)
-                    progress.update(task, advance=file.file_size)
-
-        output_manager.log_update(f"    - {self.model_identifier} extracted.")
-        os.remove(download_file_path)
-
-        # Save a small version file with the URL
-        os.makedirs(self.directory, exist_ok=True)
-        version_file_path = os.path.join(self.directory, "model_version.json")
-        with open(version_file_path, 'w') as vf:
-            json.dump({"url": self.url}, vf)
+            backup_root = Path(tempfile.mkdtemp(prefix=".lionz-backup-", dir=self.base_directory))
+            backup_model = backup_root / "previous"
+            try:
+                if os.path.lexists(self.directory):
+                    os.replace(self.directory, backup_model)
+                try:
+                    os.replace(staged_model, self.directory)
+                except BaseException:
+                    if os.path.lexists(backup_model):
+                        # If rollback itself fails, leave this separate backup
+                        # intact for recovery rather than deleting it on exit.
+                        os.replace(backup_model, self.directory)
+                    raise
+            except BaseException:
+                if not os.path.lexists(backup_model):
+                    backup_root.rmdir()
+                raise
+            else:
+                shutil.rmtree(backup_root)
 
         output_manager.log_update(f"    - {self.model_identifier} - setup complete.")
         output_manager.ok(f"{self.model_identifier.upper()} · Ready")

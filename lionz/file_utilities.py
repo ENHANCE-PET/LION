@@ -44,7 +44,6 @@ def set_permissions(file_path: str, system_type: str, output_manager: system.Out
     :rtype: None
     :raises FileNotFoundError: If the file specified by 'file_path' does not exist.
     :raises ValueError: If the provided operating system type is not supported.
-    :raises subprocess.CalledProcessError: If the 'icacls' command fails on Windows.
     :raises PermissionError: If the 'chmod' command fails on Linux or macOS.
 
     **Example**
@@ -60,7 +59,9 @@ def set_permissions(file_path: str, system_type: str, output_manager: system.Out
 
     try:
         if system_type.lower() == 'windows':
-            subprocess.check_call(["icacls", file_path, "/grant", "Everyone:(F)"], stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+            # Windows executables need no POSIX executable bit. Preserve the
+            # existing ACL rather than granting every local user write access.
+            return
         elif system_type.lower() in ['linux', 'mac']:
             os.chmod(file_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH)
         else:
