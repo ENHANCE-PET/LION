@@ -37,14 +37,14 @@ def torch_runtime(torch_version: str, cuda_version: str | None):
 def test_validator_accepts_the_supported_cuda_runtime():
     validator = load_runtime_validator()
 
-    validator.verify_runtime(torch_runtime("2.13.0+cu130", "13.0"))
+    validator.verify_runtime(torch_runtime("2.13.0+cu126", "12.6"))
 
 
 @pytest.mark.parametrize(
     ("torch_version", "cuda_version"),
     [
         ("2.9.0+cu128", "12.8"),
-        ("2.13.0+cu130", "12.8"),
+        ("2.13.0+cu126", "12.8"),
         ("2.13.0", None),
     ],
 )
@@ -54,7 +54,7 @@ def test_validator_rejects_an_unsupported_cuda_runtime(
 ):
     validator = load_runtime_validator()
 
-    with pytest.raises(RuntimeError, match="Expected Torch 2.13.0 with CUDA 13.0"):
+    with pytest.raises(RuntimeError, match="Expected Torch 2.13.0 with CUDA 12.6"):
         validator.verify_runtime(torch_runtime(torch_version, cuda_version))
 
 
@@ -81,3 +81,16 @@ def test_locked_dicom_converter_supports_pydicom_3():
         package for package in lockfile["package"] if package["name"] == "dicom2nifti"
     )
     assert Version(locked_package["version"]) >= Version("2.6.2")
+
+
+def test_locked_cuda_wheels_come_from_the_explicit_pytorch_index():
+    pyproject = tomllib.loads(PYPROJECT_PATH.read_text())
+    lockfile = tomllib.loads(UV_LOCK_PATH.read_text())
+    for name, version in (("torch", "2.13.0+cu126"), ("torchvision", "0.28.0+cu126")):
+        assert pyproject["tool"]["uv"]["sources"][name]["index"] == "pytorch-cu126"
+        packages = [p for p in lockfile["package"] if p["name"] == name and p["version"] == version]
+        assert len(packages) == 1
+        package = packages[0]
+        assert package["source"]["registry"] == "https://download.pytorch.org/whl/cu126"
+        for architecture in ("x86_64", "aarch64"):
+            assert any(f"manylinux_2_28_{architecture}.whl" in wheel["url"] for wheel in package["wheels"])

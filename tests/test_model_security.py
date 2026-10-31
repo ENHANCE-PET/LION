@@ -84,3 +84,17 @@ def test_verified_upgrade_replaces_legacy_cache(tmp_path, monkeypatch):
     data = archive_bytes("DatasetSynthetic/checkpoint.pth", b"replacement")
     download(tmp_path, monkeypatch, data)
     assert (cached / "checkpoint.pth").read_bytes() == b"replacement"
+
+
+def test_verified_model_archive_ignores_apple_metadata(tmp_path, monkeypatch):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as archive:
+        archive.writestr('DatasetSynthetic/checkpoint.pth', b'synthetic')
+        archive.writestr('__MACOSX/._DatasetSynthetic', b'metadata')
+        archive.writestr('__MACOSX/../../outside.txt', b'metadata must never be extracted')
+        archive.writestr('.DS_Store', b'metadata')
+    download(tmp_path, monkeypatch, buffer.getvalue())
+    assert (tmp_path / 'DatasetSynthetic/checkpoint.pth').read_bytes() == b'synthetic'
+    assert not (tmp_path / '__MACOSX').exists()
+    assert not (tmp_path / '.DS_Store').exists()
+    assert not (tmp_path / 'outside.txt').exists()

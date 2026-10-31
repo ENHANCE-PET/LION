@@ -188,16 +188,22 @@ class Model:
 
             extraction_path = Path(staging) / "extracted"
             with zipfile.ZipFile(download_file_path) as archive:
-                # Validate every member before writing any archive content.
+                # Validate every extracted member before writing any content.
+                # Apple-generated archives may contain a separate metadata tree;
+                # ignore it entirely, including any unsafe names within it.
+                members = []
                 for member in archive.infolist():
                     path = PurePosixPath(member.filename)
+                    if path.parts and (path.parts[0] == "__MACOSX" or member.filename == ".DS_Store"):
+                        continue
                     mode = member.external_attr >> 16
                     if (path.is_absolute() or ".." in path.parts
                             or not path.parts or path.parts[0] != self.folder_name
                             or "\\" in member.filename or ":" in member.filename
                             or stat.S_ISLNK(mode)):
                         raise ValueError(f"Unsafe model archive member: {member.filename}")
-                archive.extractall(extraction_path)
+                    members.append(member)
+                archive.extractall(extraction_path, members=members)
             staged_model = extraction_path / self.folder_name
             if not staged_model.is_dir():
                 raise ValueError("Model archive does not contain the expected directory")
